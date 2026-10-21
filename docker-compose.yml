@@ -6,8 +6,11 @@
 #
 # The API is published on 127.0.0.1 only. That is the whole shape of this
 # deployment: Kern Platform and kernctl manage it over loopback, and if you
-# want people on other machines to sync to it, you put a reverse proxy with
-# TLS in front (see docs/SELF-HOSTING.md) rather than opening this port.
+# want people on other machines to sync to it, you put a Cloudflare Tunnel or a
+# reverse proxy with TLS in front (see docs/SELF-HOSTING.md) rather than opening
+# this port. Whatever you put in front must refuse /kern/v1/admin/* itself:
+# requests arrive here through Docker's port proxy, so the server cannot tell a
+# forwarded one from a local one.
 name: kern
 
 services:

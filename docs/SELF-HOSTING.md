@@ -216,10 +216,12 @@ workable, it just puts the same refusals somewhere else.
 Install it and authenticate against the `relf.cc` zone:
 
 ```sh
+sudo mkdir -p --mode=0755 /usr/share/keyrings
 curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg | sudo tee /usr/share/keyrings/cloudflare-main.gpg >/dev/null
 echo "deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared any main" | sudo tee /etc/apt/sources.list.d/cloudflared.list
 sudo apt update && sudo apt install cloudflared
 
+# Only for a locally-managed tunnel. With a token you skip both of these.
 sudo cloudflared tunnel login      # opens a browser; authorise the relf.cc zone
 sudo cloudflared tunnel create kern
 ```
@@ -290,9 +292,11 @@ sudo systemctl enable --now cloudflared
 
 The token carries the account, the tunnel id and the tunnel's secret, so
 **treat it as a credential**: anyone holding it can run a connector for this
-tunnel. It is not a config file — routing comes from Cloudflare, so the five
-rules above have to be recreated as routes under **Networks → Tunnels →** your
-tunnel **→ Published application**, in this order:
+tunnel. It is not a config file — routing comes from Cloudflare, so rules 1 to 4
+above have to be recreated as routes under **Networks → Tunnels →** your tunnel
+**→ Published application**, in this order. (Rule 5, the catch-all for any other
+hostname, has no dashboard equivalent and is not needed: a hostname with no
+route was never pointed at this tunnel.)
 
 | # | Hostname | Path | Service |
 |---|---|---|---|
@@ -352,6 +356,27 @@ rule. Leave it in place, keep it first, and prove it after any change:
 curl -s -o /dev/null -w '%{http_code}\n' https://api.relf.cc/kern/v1/admin/stats
 # 404 — anything else means the rule is missing, misordered or misspelled
 ```
+
+**In Docker this is not optional.** The API is published as
+`127.0.0.1:8787:8787`, so requests reach the container through Docker's port
+proxy and arrive from the bridge gateway rather than from loopback. `kernctl`
+on the host and a request `cloudflared` forwards from the internet travel that
+same hop and look identical to the server — there is no address rule that can
+admit one and refuse the other. Whatever makes `kernctl` work makes the tunnel
+work too, so the refusal has to happen before the server sees the request.
+
+Which case you are in takes one command on the server:
+
+```sh
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8787/kern/v1/admin/stats
+```
+
+| | |
+|---|---|
+| `401` | The address gate passed and only the token refused you — the server sees these requests as local. A tunnel route to this port would expose the management API. |
+| `403` | The address gate refused you (`admin_local_only`). `kernctl` cannot reach it either; it needs `ADMIN_LOCAL_ONLY=false` and `ADMIN_ALLOW_FROM` set to the bridge gateway (`docker network inspect kern_default -f '{{range .IPAM.Config}}{{.Gateway}}{{end}}'`) — and once it is, the first case applies. |
+
+Either way the edge refusal is what keeps the management API private.
 
 Belt and braces, if you want it: a Cloudflare WAF custom rule blocking
 `http.request.uri.path contains "/kern/v1/admin"` refuses those requests at the
