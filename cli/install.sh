@@ -154,6 +154,19 @@ random_secret() {
   fi
 }
 
+random_password() {
+  # Hex, not base64, because this one is interpolated into DATABASE_URL
+  # (postgres://kern:<password>@db:5432/kern). A "/" in a base64 password
+  # ends the URL's authority early and leaves an invalid port, and the API
+  # dies at startup with ERR_INVALID_URL. Hex cannot. 24 bytes is 192 bits.
+  bytes="${1:-24}"
+  if have openssl; then
+    openssl rand -hex "$bytes" | tr -d '\n'
+  else
+    head -c "$bytes" /dev/urandom | od -An -tx1 | tr -d ' \n'
+  fi
+}
+
 guess_url() {
   ip=""
   if have hostname; then ip="$(hostname -I 2>/dev/null | awk '{print $1}')"; fi
@@ -358,7 +371,7 @@ cp "$SRC/cli/kernctl" "$DIR/cli/kernctl"
 
 if [ "$FRESH" = 1 ]; then
   step "Generating secrets"
-  POSTGRES_PASSWORD="$(random_secret 24)"
+  POSTGRES_PASSWORD="$(random_password 24)"
   AUTH_SECRET="$(random_secret 48)"
   STREAMS_KEY="$(random_secret 32)"
   umask 077

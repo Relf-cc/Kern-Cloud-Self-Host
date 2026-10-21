@@ -138,10 +138,17 @@ cp .env.example .env
 Generate the three secrets; the addresses are already in the file:
 
 ```sh
-POSTGRES_PASSWORD=$(openssl rand -base64 36)
+POSTGRES_PASSWORD=$(openssl rand -hex 24)
 BETTER_AUTH_SECRET=$(openssl rand -base64 48)
 STREAMS_ENCRYPTION_KEY=$(openssl rand -base64 32)
 ```
+
+**`POSTGRES_PASSWORD` must be hex, not base64.** `docker-compose.yml` builds
+`DATABASE_URL` as `postgres://kern:<password>@db:5432/kern`, and a `/` — which
+base64 produces about 40% of the time — ends the URL's authority early and
+leaves an invalid port. The API then dies at startup with `ERR_INVALID_URL`
+while PostgreSQL itself stays healthy, which reads like a database problem and
+is not one. The other two are never put in a URL, so base64 is fine for them.
 
 `PUBLIC_URL=https://api.relf.cc` and `STREAMS_URL=https://streams.relf.cc` are
 already set by `.env.example`; change them only if you are running a different
@@ -843,6 +850,23 @@ the wrong port.
 
 **The management API refuses me.** `admin_local_only` means the address list
 refused you, not your token. Connect over loopback or a tunnel.
+
+**The API restarts forever and the log says `ERR_INVALID_URL`.** PostgreSQL is
+healthy, the API container is `Restarting`, and the stack trace ends in
+`pg-connection-string`. `POSTGRES_PASSWORD` contains a character that is not
+safe in a URL — almost always a `/` from `openssl rand -base64`. Give it a hex
+password instead, changing it in the database and in `.env` together:
+
+```sh
+NEW=$(openssl rand -hex 24)
+docker compose exec db psql -U kern -d kern -c "ALTER USER kern WITH PASSWORD '$NEW';"
+sed -i "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=$NEW|" .env
+docker compose up -d
+```
+
+Changing `POSTGRES_PASSWORD` in `.env` alone does **not** work once the
+database exists: PostgreSQL keeps the password it was initialised with, so the
+two must be changed together or the volume removed and the stack started again.
 
 **Logs are empty after a restart.** `kernctl logs` reads a ring buffer in the
 server's memory (`ADMIN_LOG_LINES`), so a restart clears it. For history, read
