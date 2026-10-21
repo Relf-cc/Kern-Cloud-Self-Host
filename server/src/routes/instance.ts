@@ -38,6 +38,13 @@ instance.get(`${config.basePath}/instance`, (c) =>
     registration: live.registration,
     /** Present only when sign-ups are limited to certain email domains. */
     emailDomains: live.registration === "open" && live.allowedEmailDomains.length ? live.allowedEmailDomains : undefined,
+    /**
+     * Whether creating a workspace here takes a key the administrator minted
+     * ("required"), or anybody with an account may ("off"). The app asks for
+     * a key up front when this says required, rather than letting somebody
+     * fill in a whole workspace and refusing it at the end.
+     */
+    workspaceKeys: live.workspaceKeys,
     /** A note from the administrator, shown on the sign-in screen. */
     notice: live.motd || undefined,
     contact: live.supportEmail || undefined,

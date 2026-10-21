@@ -45,6 +45,20 @@ function registration(): Registration {
   return v === "open" || v === "closed" ? v : "invite";
 }
 
+/**
+ * Whether creating a workspace takes a key an administrator minted.
+ *
+ * "off" is the default and the ordinary self-hosted shape: anyone with an
+ * account may create one. "required" suits an instance run for other people,
+ * where accounts are cheap but workspaces are what cost the host something.
+ * It gates creation only — never joining, never the personal space.
+ */
+export type WorkspaceKeys = "off" | "required";
+
+function workspaceKeys(): WorkspaceKeys {
+  return optional("WORKSPACE_KEYS", "off").toLowerCase() === "required" ? "required" : "off";
+}
+
 function load() {
   const port = int("PORT", 8787);
   const publicUrl = optional("PUBLIC_URL", `http://localhost:${port}`).replace(/\/+$/, "");
@@ -95,6 +109,18 @@ function load() {
     githubApi: optional("GITHUB_API_URL", "https://api.github.com").replace(/\/+$/, ""),
     /** Custom URL scheme the desktop app registers. */
     appScheme: optional("APP_SCHEME", "kern"),
+    /** Whether creating a workspace needs a minted key; see WorkspaceKeys. */
+    workspaceKeys: workspaceKeys(),
+    /**
+     * Accounts that may manage this instance's workspace keys while signed in
+     * normally, at /kern/v1/owner/*. Deliberately an environment value and
+     * not a database column: granting it takes shell access on the server, so
+     * a compromised database cannot make anybody an administrator.
+     *
+     * This is NOT the management API. It can mint, list and revoke workspace
+     * keys and nothing else; /kern/v1/admin/* remains loopback and token-only.
+     */
+    adminEmails: list("ADMIN_EMAILS").map((e) => e.toLowerCase()),
     /** Where people get the app when an invite link opens without it installed. */
     downloadUrl: optional("DOWNLOAD_URL", "https://github.com/kern-platform/kern/releases/latest"),
     databaseUrl: required("DATABASE_URL"),

@@ -241,6 +241,61 @@ ok(!!entry?.by && !!entry?.at, "and each entry names the token that did it, and 
 // Reads are not audited: an audit trail nobody can read through is useless.
 ok(!actions.includes("ping") && !actions.includes("users.list"), "looking at things is not recorded");
 
+// -------------------------------------------------------- workspace keys
+//
+// The gate decides who may CREATE a workspace. What it must never do is get
+// in the way of anything else, so this checks both halves: that a key is
+// demanded when the gate is on, and that it is ignored when it is off.
+
+const keysBefore = await adm("GET", "/workspace-keys");
+ok(keysBefore.status === 200 && Array.isArray(keysBefore.json.keys), `GET /workspace-keys lists them (${keysBefore.status})`);
+
+const mintedKey = await adm("POST", "/workspace-keys", { note: "e2e" });
+ok(mintedKey.status === 201 && /^k_[0-9a-f]{32}$/.test(mintedKey.json.key ?? ""), "POST /workspace-keys mints a k_<32 hex> key");
+ok(mintedKey.json.id !== mintedKey.json.key?.slice(2, 10), "the id comes from the hash, not from the start of the key");
+
+const keyRo = await adm("POST", "/workspace-keys", { note: "nope" }, RO);
+ok(keyRo.status === 403, `a read-scoped token cannot mint one (${keyRo.status})`);
+
+const listed = await adm("GET", "/workspace-keys");
+ok(
+  !JSON.stringify(listed.json).includes(mintedKey.json.key),
+  "and the key itself is never returned again, only its id",
+);
+
+// With the gate off (the default), creating a workspace must not ask for one.
+await adm("PATCH", "/settings", { workspaceKeys: "off" });
+const instOff = await api("GET", "/instance");
+ok(instOff.json.workspaceKeys === "off", "/instance reports the gate off");
+
+// Turn it on and confirm /instance says so, which is how the app knows to ask.
+const on = await adm("PATCH", "/settings", { workspaceKeys: "required" });
+ok(on.status === 200, `the gate turns on without a restart (${on.status})`);
+const instOn = await api("GET", "/instance");
+ok(instOn.json.workspaceKeys === "required", "/instance reports the gate on");
+
+// Creating a workspace without a key is refused, and says why.
+const noKey = await api("POST", "/workspaces", { name: "Should Not Exist" });
+ok(
+  noKey.status === 401 || (noKey.status === 403 && noKey.json.code === "workspace_key_required"),
+  `creating a workspace with no key is refused (${noKey.status} ${noKey.json?.code ?? ""})`,
+);
+
+const badKey = await api("POST", "/workspaces", { name: "Nor This", key: "k_" + "f".repeat(32) });
+ok(
+  badKey.status === 401 || (badKey.status === 403 && badKey.json.code === "workspace_key_invalid"),
+  `an unknown key is refused (${badKey.status} ${badKey.json?.code ?? ""})`,
+);
+
+// Revoking stops the next use; it never unmakes a workspace.
+const revokeKey = await adm("DELETE", `/workspace-keys/${mintedKey.json.id}`);
+ok(revokeKey.status === 200, `a key can be revoked (${revokeKey.status})`);
+const revokedTwice = await adm("DELETE", `/workspace-keys/${mintedKey.json.id}`);
+ok(revokedTwice.status === 404, `revoking it again is a 404, not a second revocation (${revokedTwice.status})`);
+
+// Leave the instance as it was found.
+await adm("PATCH", "/settings", { workspaceKeys: null });
+
 // ----------------------------------------------------------- the token
 
 const tokens = await adm("GET", "/tokens");

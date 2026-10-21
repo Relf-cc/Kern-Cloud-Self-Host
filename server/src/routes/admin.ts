@@ -31,6 +31,7 @@ import { fixableIds, runAllFixes, runChecks, runFix } from "../admin/checks.js";
 import { tail, type Level } from "../admin/log.js";
 import { activity, apiUrl, instanceVersion, overview } from "../admin/stats.js";
 import { listTokens, mint, revoke } from "../admin/tokens.js";
+import { keyCounts, listKeys, mintKey, revokeKey } from "../workspace-keys.js";
 import { broadcastAll, disconnectUser, evict, notifyUser } from "../realtime.js";
 
 /** Realtime statistics, handed in so this module doesn't reach into the server. */
@@ -568,6 +569,48 @@ admin.patch("/streams/:id", async (c) => {
 });
 
 // ------------------------------------------------------------------- tokens
+
+// ---- workspace keys -------------------------------------------------------
+//
+// Only meaningful while WORKSPACE_KEYS is "required", but they can be minted
+// before turning it on, so an administrator can hand keys out first and switch
+// the gate on once people have them.
+
+admin.get("/workspace-keys", async (c) => {
+  const [rows, counts] = await Promise.all([listKeys(), keyCounts()]);
+  return c.json({
+    required: live.workspaceKeys === "required",
+    counts,
+    keys: rows.map((k) => ({
+      id: k.id,
+      note: k.note,
+      createdAt: iso(k.created_at),
+      redeemedBy: k.redeemed_by,
+      redeemedEmail: k.redeemed_email,
+      redeemedAt: iso(k.redeemed_at),
+      lastUsedAt: iso(k.last_used_at),
+      uses: k.uses,
+      revokedAt: iso(k.revoked_at),
+    })),
+  });
+});
+
+admin.post("/workspace-keys", async (c) => {
+  requireWrite(c.get("admin"));
+  const input = await body(c, z.object({ note: z.string().trim().max(120).default("") }));
+  const minted = await mintKey({ note: input.note, createdBy: c.get("admin").id });
+  await adminAudit(c, "workspace-key.create", minted.id, { note: minted.note });
+  // The only time the key itself is ever returned.
+  return c.json({ key: minted.key, id: minted.id, note: minted.note }, 201);
+});
+
+admin.delete("/workspace-keys/:id", async (c) => {
+  requireWrite(c.get("admin"));
+  const id = c.req.param("id");
+  if (!(await revokeKey(id))) throw notFound("That workspace key");
+  await adminAudit(c, "workspace-key.revoke", id, {});
+  return c.json({ ok: true });
+});
 
 admin.get("/tokens", async (c) => {
   const rows = await listTokens();

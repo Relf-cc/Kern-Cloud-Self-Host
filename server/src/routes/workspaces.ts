@@ -1,6 +1,6 @@
 // Account overview, the personal space, workspaces, members and invitations.
 
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { z } from "zod";
 import { config } from "../config.js";
 import { one, pool, query, tx, type Db } from "../db.js";
@@ -8,6 +8,8 @@ import { inviteMail, send } from "../mail.js";
 import { badRequest, body, conflict, forbidden, HttpError, iso, notFound, requireUser, requireVerified, type Env } from "../lib/http.js";
 import { audit, ensurePersonal, memberIds, membership, ROLE_RANK, serializeSpace, type Role, type SpaceRow } from "../lib/spaces.js";
 import { broadcastSpace, evict, issueTicket, notifyUser } from "../realtime.js";
+import { live } from "../live.js";
+import { redeem } from "../workspace-keys.js";
 
 const TEAM_SIZES = ["just-me", "2-10", "11-50", "51-200", "201-1000", "1000+"] as const;
 
@@ -42,6 +44,11 @@ const inviteInput = z.object({
 
 const createBody = z.object({
   name: z.string().trim().min(1, "Give the workspace a name.").max(80),
+  /**
+   * A workspace key, when this instance requires one (WORKSPACE_KEYS).
+   * Ignored when it doesn't, so a client may always send one.
+   */
+  key: z.string().trim().max(64).optional(),
   slug: slug.optional(),
   ...details,
   invites: z.array(inviteInput).max(50).optional(),
@@ -220,6 +227,35 @@ async function announce(spaceId: string, event: string, extra: Record<string, un
   for (const id of await memberIds(spaceId)) notifyUser(id, { type: "space", event, space: spaceId, ...extra });
 }
 
+/** Where a client may put a workspace key, besides the request body. */
+const KEY_HEADER = "x-kern-workspace-key";
+
+/**
+ * Enforces WORKSPACE_KEYS on workspace creation and returns the key's id for
+ * the audit entry, or null when this instance doesn't ask for one.
+ *
+ * Refusals say what to do next, because the person reading them has a choice:
+ * ask whoever runs this instance for a key, or run their own server with Kern
+ * Platform, where no key is needed at all.
+ */
+async function checkWorkspaceKey(c: Context<Env>, userId: string, fromBody: string | undefined): Promise<string | null> {
+  if (live.workspaceKeys !== "required") return null;
+  const presented = (fromBody ?? c.req.header(KEY_HEADER) ?? "").trim();
+  const elsewhere = `Ask whoever runs ${live.instanceName} for a key, or run your own server with Kern Platform, which needs none.`;
+  if (!presented) {
+    throw new HttpError(403, "workspace_key_required", `Creating a workspace on ${live.instanceName} needs a key. ${elsewhere}`);
+  }
+  const result = await redeem(presented, userId);
+  if (result.ok) return result.id;
+  const why: Record<typeof result.reason, string> = {
+    malformed: "That doesn't look like a workspace key. They read k_ followed by 32 characters.",
+    unknown: "That workspace key isn't one this server issued.",
+    revoked: "That workspace key has been revoked.",
+    taken: "That workspace key already belongs to another account. A key is claimed by the first account that uses it.",
+  };
+  throw new HttpError(403, "workspace_key_invalid", `${why[result.reason]} ${elsewhere}`);
+}
+
 export const workspaces = new Hono<Env>();
 workspaces.use("*", requireUser);
 
@@ -261,6 +297,9 @@ workspaces.post("/workspaces", async (c) => {
   const user = c.get("user");
   requireVerified(user);
   const input = await body(c, createBody);
+  // Creating a workspace may take a key on this instance. Joining one never
+  // does, and the personal space isn't a workspace, so neither reaches here.
+  const keyId = await checkWorkspaceKey(c, user.id, input.key);
   const owned = await one<{ n: number }>("SELECT count(*)::int AS n FROM kern_space WHERE owner_id = $1 AND kind = 'workspace' AND deleted_at IS NULL", [user.id]);
   if ((owned?.n ?? 0) >= config.limits.workspacesPerUser) throw conflict(`You can own up to ${config.limits.workspacesPerUser} workspaces.`, "limit");
 
@@ -287,7 +326,7 @@ workspaces.post("/workspaces", async (c) => {
       db,
     );
     await query("INSERT INTO kern_member(space_id, user_id, role) VALUES ($1, $2, 'owner')", [row!.id, user.id], db);
-    await audit(row!.id, user.id, "workspace.created", { name: input.name }, db);
+    await audit(row!.id, user.id, "workspace.created", keyId ? { name: input.name, key: keyId } : { name: input.name }, db);
     return row!;
   });
 

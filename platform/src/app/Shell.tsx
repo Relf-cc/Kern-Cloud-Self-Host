@@ -8,7 +8,7 @@
 
 import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Activity, Database, FileText, Radio, Server, Settings, Stethoscope, Terminal, Users } from "lucide-react";
+import { Activity, Database, FileText, KeyRound, Radio, Server, Settings, Stethoscope, Terminal, Users } from "lucide-react";
 import { api } from "@/lib/ipc";
 import { useRouter, type Page } from "@/stores/router";
 import type { Server as ServerProfile } from "@/lib/types";
@@ -23,6 +23,7 @@ const NAV: { id: Page; label: string; icon: typeof Activity }[] = [
   { id: "people", label: "People", icon: Users },
   { id: "spaces", label: "Spaces", icon: Database },
   { id: "streams", label: "Streams", icon: Radio },
+  { id: "keys", label: "Keys", icon: KeyRound },
   { id: "logs", label: "Logs", icon: FileText },
   { id: "console", label: "Console", icon: Terminal },
 ];

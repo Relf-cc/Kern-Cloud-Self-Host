@@ -921,6 +921,62 @@ print()
   esac
 }
 
+# ---------------------------------------------------------------- keys
+#
+# Workspace keys. While WORKSPACE_KEYS is "required", creating a workspace on
+# this instance takes one of these; joining somebody else's never does.
+
+cmd_keys() {
+  sub="${1:-list}"
+  [ $# -gt 0 ] && shift
+  case "$sub" in
+    list)
+      BODY="$(api GET /workspace-keys)"
+      render "$(py '
+c = D["counts"]
+print()
+if not D["required"]:
+    print("  " + DIM + "WORKSPACE_KEYS is off: anybody with an account may create a workspace." + OFF)
+    print("  " + DIM + "Turn it on with: kernctl set workspaceKeys required" + OFF)
+    print()
+for k in D["keys"]:
+    if k["revokedAt"]:
+        state = DIM + "revoked " + OFF
+    elif k["redeemedBy"]:
+        state = OK + "in use  " + OFF
+    else:
+        state = "unused  "
+    who = k["redeemedEmail"] or ("-" if not k["redeemedBy"] else "(deleted account)")
+    uses = "%d use%s" % (k["uses"], "" if k["uses"] == 1 else "s")
+    print("  %s  %s %-30s %-8s %s" % (k["id"], state, who, uses, k["note"]))
+print()
+print("  " + DIM + "%d issued, %d usable, %d taken, %d revoked" % (c["total"], c["usable"], c["redeemed"], c["revoked"]) + OFF)
+print()
+')"
+      ;;
+    new|create)
+      note="${1:-}"
+      BODY="$(api POST /workspace-keys "{\"note\":$(json_quote "$note")}")"
+      [ "$JSON" = 1 ] && { printf '%s
+' "$BODY"; return 0; }
+      say ""
+      say "  ${C_B}$(json_str "$BODY" key)${C_OFF}"
+      say ""
+      say "  ${C_DIM}Give this to one person. It is claimed by the first account${C_OFF}"
+      say "  ${C_DIM}that uses it and refused to any other. Shown once.${C_OFF}"
+      say ""
+      ;;
+    revoke)
+      [ $# -ge 1 ] || usage_error "Which key? $PROG keys revoke <id>"
+      BODY="$(api DELETE "/workspace-keys/$1")"
+      [ "$JSON" = 1 ] && { printf '%s
+' "$BODY"; return 0; }
+      say "${C_OK}Revoked $1.${C_OFF} ${C_DIM}Workspaces already created keep working.${C_OFF}"
+      ;;
+    *) usage_error "Unknown: keys $sub" ;;
+  esac
+}
+
 # ----------------------------------------------------------------------- pair
 #
 # Hands Kern Platform everything it needs in one paste.
@@ -1160,6 +1216,9 @@ The instance
   set <key> <value>           change one ("default" falls back to .env)
   notice "TEXT" [--warn]      tell everyone currently connected something
   token list | new "NAME" [--read] [--days N] | revoke <id>
+  keys list | new ["NOTE"] | revoke <id>
+                              workspace keys: who may create a workspace here,
+                              while 'set workspaceKeys required' is on
   pair ["NAME"]               an address and token for Kern Platform, in one paste
 
 Running it
@@ -1211,6 +1270,7 @@ case "$CMD" in
   settings) cmd_settings "$@" ;;
   set) cmd_set "$@" ;;
   token|tokens) cmd_token "$@" ;;
+  keys|key) cmd_keys "$@" ;;
   pair) cmd_pair "$@" ;;
   logs|log) cmd_logs "$@" ;;
   audit) cmd_audit "$@" ;;

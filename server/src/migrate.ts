@@ -254,6 +254,30 @@ const STEPS: string[] = [
   );
   CREATE INDEX kern_admin_audit_time ON kern_admin_audit(created_at DESC);
   `,
+  // 7: workspace keys. When WORKSPACE_KEYS is on, creating a workspace needs
+  // one of these (`k_<32 hex>`), minted by an administrator and handed to the
+  // person who may use this instance. Only the hash is stored, so the table
+  // is worthless if it leaks. A key binds to the first account that uses it
+  // and is refused to any other, which is what stops one key being passed
+  // around. Joining a workspace by invitation never consults this table.
+  `
+  CREATE TABLE kern_workspace_key (
+    id text PRIMARY KEY CHECK (id ~ '^[0-9a-f]{8}$'),
+    -- SHA-256 of the whole key; the key itself is shown once, at creation.
+    key_hash text NOT NULL UNIQUE,
+    note text NOT NULL DEFAULT '',
+    created_at timestamptz NOT NULL DEFAULT now(),
+    created_by text,
+    -- The account that first used it. NULL until then; never changes after.
+    redeemed_by text REFERENCES "user"(id) ON DELETE SET NULL,
+    redeemed_at timestamptz,
+    last_used_at timestamptz,
+    uses int NOT NULL DEFAULT 0,
+    revoked_at timestamptz
+  );
+  CREATE INDEX kern_workspace_key_redeemed ON kern_workspace_key(redeemed_by) WHERE redeemed_by IS NOT NULL;
+  CREATE INDEX kern_workspace_key_created ON kern_workspace_key(created_at DESC);
+  `,
 ];
 
 export async function migrate(): Promise<void> {

@@ -8,6 +8,7 @@ sync to it safely.
 - [Installing](#installing)
 - [Putting it on the internet](#putting-it-on-the-internet)
 - [Who may sign up](#who-may-sign-up)
+- [Who may create a workspace](#who-may-create-a-workspace)
 - [Mail](#mail)
 - [Managing it](#managing-it)
 - [Keeping it healthy](#keeping-it-healthy)
@@ -611,6 +612,70 @@ kernctl allow list
 ```
 
 `MAX_USERS` caps how many accounts the instance will hold; `0` means no limit.
+
+## Who may create a workspace
+
+`REGISTRATION` decides who may have an account. This decides what they may do
+with one, and it is a separate question on an instance you run for other
+people: accounts are cheap, but a workspace is what costs you storage, mail
+and attention.
+
+```sh
+WORKSPACE_KEYS=required
+```
+
+With it on, creating a workspace takes a key you minted and handed over.
+Everything else is untouched — **the gate is on creation and nothing else**:
+
+| | |
+|---|---|
+| Creating a workspace | Needs a key. |
+| Accepting an invitation | Never does. Colleagues you invite need nothing. |
+| Working in a workspace | Never does, once somebody is in one. |
+| The personal space | Never does. It isn't a workspace. |
+
+A key reads `k_` and 32 hex characters. Only its SHA-256 is stored, so the
+table is worthless if it leaks, and it is shown exactly once when minted.
+**A key is claimed by the first account that uses it** and refused to every
+other one afterwards, so one key passed around does not become ten workspaces.
+Once claimed, that account may keep using it, up to `WORKSPACES_PER_USER`.
+
+```sh
+kernctl keys new "Acme pilot"      # mints one, prints it once
+kernctl keys list                  # who has claimed what
+kernctl keys revoke <id>           # stops the next use
+```
+
+Revoking never unmakes a workspace already created with the key. It is the
+same in Kern Platform, on the Keys page, which also has the switch.
+
+Somebody refused is told what to do next: ask you for a key, or run their own
+server with Kern Platform, which needs none.
+
+### Managing keys without SSH
+
+Handing out keys over SSH every time is not a life, so an account you name may
+do it while signed in normally:
+
+```sh
+ADMIN_EMAILS=christianjamesrelf@gmail.com
+```
+
+Those accounts reach `/kern/v1/owner/*` with an ordinary session, through your
+tunnel or proxy like the rest of the app API. **It is not the management API.**
+It can list, mint and revoke workspace keys and turn the requirement on or off.
+There is no fifth thing it can do: the SQL console, account deletion, logs and
+backups stay on `/kern/v1/admin/*`, which remains loopback-only and must still
+be refused at the edge — see [the ingress rules](#the-ingress-rules).
+
+`ADMIN_EMAILS` is an environment value rather than a database column on
+purpose. Granting it takes shell access on the server, so a compromised
+database cannot promote anybody, and a restored backup cannot quietly carry an
+administrator with it. Matching is exact and case-insensitive: no domains, no
+wildcards. Changes need a restart.
+
+Every mint and revocation lands in the same audit trail as the management API
+(`kernctl audit`), attributed to the account rather than to a token.
 
 ## Mail
 

@@ -132,6 +132,7 @@ export interface SettingsReply {
     instanceName: LiveSetting<string>;
     supportEmail: LiveSetting<string>;
     registration: LiveSetting<Registration>;
+    workspaceKeys: LiveSetting<"off" | "required">;
     allowedEmailDomains: LiveSetting<string[]>;
     maxUsers: LiveSetting<number>;
     sharesEnabled: LiveSetting<boolean>;
@@ -257,6 +258,39 @@ export interface MintedToken {
   name: string;
   scope: Scope;
   expiresAt: string | null;
+}
+
+// ------------------------------------------------------- workspace keys
+
+/**
+ * A workspace key. While the instance requires them, creating a workspace
+ * takes one; joining somebody else's never does. A key is claimed by the
+ * first account that uses it and refused to every other one afterwards.
+ */
+export interface WorkspaceKey {
+  id: string;
+  note: string;
+  createdAt: string | null;
+  redeemedBy: string | null;
+  redeemedEmail: string | null;
+  redeemedAt: string | null;
+  lastUsedAt: string | null;
+  uses: number;
+  revokedAt: string | null;
+}
+
+export interface WorkspaceKeys {
+  /** Whether the gate is actually on; keys can be minted before it is. */
+  required: boolean;
+  counts: { total: number; usable: number; redeemed: number; revoked: number };
+  keys: WorkspaceKey[];
+}
+
+/** Only ever returned once, by POST /workspace-keys. */
+export interface MintedWorkspaceKey {
+  key: string;
+  id: string;
+  note: string;
 }
 
 // --------------------------------------------------------------- log, audit

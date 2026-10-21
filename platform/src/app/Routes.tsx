@@ -19,6 +19,7 @@ import type { Server } from "@/lib/types";
 import { useRouter, type Page } from "@/stores/router";
 import { ConsolePage } from "@/features/console/ConsolePage";
 import { HealthPage } from "@/features/health/HealthPage";
+import { KeysPage } from "@/features/keys/KeysPage";
 import { LogsPage } from "@/features/logs/LogsPage";
 import { OverviewPage } from "@/features/overview/OverviewPage";
 import { PeoplePage } from "@/features/people/PeoplePage";
@@ -33,6 +34,7 @@ export const PAGE_TITLES: Record<Page, string> = {
   people: "People",
   spaces: "Spaces",
   streams: "Streams",
+  keys: "Workspace keys",
   logs: "Logs",
   console: "Console",
   settings: "Server settings",
@@ -80,6 +82,8 @@ export function Routes({ server, pingError }: { server: Server; pingError: unkno
       return <SpacesPage />;
     case "streams":
       return <StreamsPage />;
+    case "keys":
+      return <KeysPage />;
     case "logs":
       return <LogsPage />;
     case "console":

@@ -11,7 +11,7 @@
 // overrides it, and clearing a stored value falls back to the environment.
 
 import { query } from "./db.js";
-import { config, type Registration } from "./config.js";
+import { config, type Registration, type WorkspaceKeys } from "./config.js";
 
 export interface LiveSettings {
   /** What this instance calls itself, in emails and hand-off pages. */
@@ -20,6 +20,8 @@ export interface LiveSettings {
   supportEmail: string;
   /** How new accounts come about. */
   registration: Registration;
+  /** Whether creating a workspace takes a minted key. */
+  workspaceKeys: WorkspaceKeys;
   /** Sign-ups restricted to these email domains; empty means any. */
   allowedEmailDomains: string[];
   /** Accounts this instance will hold; 0 means no limit. */
@@ -37,6 +39,10 @@ const FIELDS = {
   registration: {
     parse: (v: string) => (v === "open" || v === "closed" || v === "invite" ? (v as Registration) : config.registration),
     write: (v: unknown) => (v === "open" || v === "closed" || v === "invite" ? String(v) : ""),
+  },
+  workspaceKeys: {
+    parse: (v: string) => (v === "required" || v === "off" ? (v as WorkspaceKeys) : config.workspaceKeys),
+    write: (v: unknown) => (v === "required" || v === "off" ? String(v) : ""),
   },
   allowedEmailDomains: {
     parse: (v: string) => domains(v.split(",")),
@@ -65,6 +71,7 @@ function defaults(): LiveSettings {
     instanceName: config.instanceName,
     supportEmail: config.supportEmail,
     registration: config.registration,
+    workspaceKeys: config.workspaceKeys,
     allowedEmailDomains: config.allowedEmailDomains,
     maxUsers: config.limits.users,
     sharesEnabled: config.shares.enabled,

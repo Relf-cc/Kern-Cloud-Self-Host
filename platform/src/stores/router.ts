@@ -8,7 +8,7 @@
 
 import { create } from "zustand";
 
-export type Page = "overview" | "health" | "people" | "spaces" | "streams" | "logs" | "console" | "settings" | "servers";
+export type Page = "overview" | "health" | "people" | "spaces" | "streams" | "keys" | "logs" | "console" | "settings" | "servers";
 
 interface RouterState {
   page: Page;

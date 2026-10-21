@@ -20,6 +20,7 @@ import { capture } from "./routes/capture.js";
 import { inbound } from "./routes/inbound.js";
 import { ingest } from "./routes/ingest.js";
 import { instance } from "./routes/instance.js";
+import { owner } from "./routes/owner.js";
 import { links } from "./routes/links.js";
 import { sharePages, shares } from "./routes/shares.js";
 import { streams } from "./routes/streams.js";
@@ -62,6 +63,10 @@ export function createApp(stats: () => Record<string, unknown> = () => ({})) {
   // Management, for Kern Platform and kernctl. Loopback-only by default; see
   // admin/guard.ts.
   app.route(`${config.basePath}/admin`, admin);
+  // Workspace keys for an account named in ADMIN_EMAILS, over an ordinary
+  // session. Deliberately separate from /admin, which stays loopback-only:
+  // see routes/owner.ts for why there are two surfaces rather than one.
+  app.route(`${config.basePath}/owner`, owner);
 
   app.route("/", links);
   // Publishing can be turned off for the whole instance (SHARES_ENABLED, or

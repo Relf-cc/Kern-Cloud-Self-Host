@@ -116,6 +116,12 @@ export const api = {
       call<T.MintedToken>("admin_send", { method: "POST", path: "/tokens", body: { name, scope, days } }),
     revokeToken: (id: string) => call<{ revoked: string }>("admin_send", { method: "DELETE", path: `/tokens/${encodeURIComponent(id)}` }),
 
+    // ----- workspace keys
+    workspaceKeys: () => call<T.WorkspaceKeys>("admin_get", { path: "/workspace-keys" }),
+    mintWorkspaceKey: (note: string) => call<T.MintedWorkspaceKey>("admin_send", { method: "POST", path: "/workspace-keys", body: { note } }),
+    revokeWorkspaceKey: (id: string) =>
+      call<{ ok: boolean }>("admin_send", { method: "DELETE", path: `/workspace-keys/${encodeURIComponent(id)}` }),
+
     // ----- watching
     logs: (since: number, level?: "warn" | "error") =>
       call<T.LogReply>("admin_get", { path: withQuery("/logs", { since, limit: 400, level }) }),
