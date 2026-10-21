@@ -10,14 +10,17 @@
 // have been there. Nothing here deletes anybody's work - that lives on the
 // pages for the thing being deleted, behind a typed confirmation.
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, Minus, RefreshCw, Stethoscope, TriangleAlert, Wrench, X } from "lucide-react";
 import { api, describeError } from "@/lib/ipc";
 import { invalidateServerState } from "@/lib/query";
+import { css } from "@/components/charts/theme";
 import type { CheckStatus, Check as CheckRow } from "@/lib/types";
 import { Button } from "@/components/ui/Button";
 import { Badge, Empty, Loading, Panel } from "@/components/ui/Controls";
+import { Page, PageBody, PageHeader } from "@/components/layout/Page";
+import { DonutChart, type Slice } from "@/components/charts";
 import { toastError, toastOk } from "@/stores/toast";
 
 const MARKS: Record<CheckStatus, typeof Check> = { ok: Check, warn: TriangleAlert, fail: X, skip: Minus };
@@ -29,7 +32,7 @@ const GROUP_NAMES: Record<string, string> = {
   mail: "Email",
 };
 
-export function HealthPage() {
+export function HealthPage({ readOnly = false }: { readOnly?: boolean }) {
   const [running, setRunning] = useState<string | null>(null);
   const client = useQueryClient();
   const health = useQuery({ queryKey: ["health"], queryFn: api.admin.health, refetchInterval: 60_000 });
@@ -54,18 +57,44 @@ export function HealthPage() {
     fix.mutate(id);
   };
 
-  if (health.isLoading) return <div className="page"><Loading what="Running the checks" /></div>;
+  const checks = health.data?.checks ?? [];
+  const tally = useMemo(() => {
+    const of = (status: CheckStatus) => checks.filter((c) => c.status === status).length;
+    return { ok: of("ok"), warn: of("warn"), fail: of("fail"), skip: of("skip") };
+  }, [checks]);
+
+  // A ring of states, so these take the reserved status tones rather than the
+  // greyscale ramp - and every one of them is named in the legend beside it,
+  // with its count, because a colour alone must never be the signal.
+  const composition: Slice[] = [
+    { label: "Passing", value: tally.ok, display: String(tally.ok) },
+    { label: "To look at", value: tally.warn, display: String(tally.warn) },
+    { label: "Failing", value: tally.fail, display: String(tally.fail) },
+    { label: "Not applicable", value: tally.skip, display: String(tally.skip) },
+  ];
+  const statusTones = [css("--hue-2", "#82b48f"), css("--warning", "#cfae74"), css("--danger", "#e0716f"), css("--text-4", "#5e5e5e")];
+
+  if (health.isLoading) {
+    return (
+      <Page>
+        <PageHeader icon={Stethoscope} title="Health" />
+        <PageBody>
+          <Loading what="Running the checks" />
+        </PageBody>
+      </Page>
+    );
+  }
   if (health.error || !health.data) {
     return (
-      <div className="page">
-        <Empty title="Couldn't run the checks">{describeError(health.error)}</Empty>
-      </div>
+      <Page>
+        <PageHeader icon={Stethoscope} title="Health" />
+        <PageBody narrow>
+          <Empty title="Couldn't run the checks">{describeError(health.error)}</Empty>
+        </PageBody>
+      </Page>
     );
   }
 
-  const checks = health.data.checks;
-  const failing = checks.filter((c) => c.status === "fail").length;
-  const warning = checks.filter((c) => c.status === "warn").length;
   const repairable = checks.filter((c) => c.fix && c.status !== "ok").length;
 
   // Group in the order the server sent them, so related checks stay together.
@@ -76,26 +105,49 @@ export function HealthPage() {
     else groups.push({ name: c.group, checks: [c] });
   }
 
+  const headline = tally.fail ? `${tally.fail} failing` : tally.warn ? `${tally.warn} to look at` : "All good";
+
   return (
-    <div className="page">
-      <div className="page__inner">
-        <div className="toolbar">
-          <div className="col" style={{ gap: 2 }}>
-            <span style={{ fontSize: "var(--fs-lg)", fontWeight: 600 }}>
-              {failing ? `${failing} failing` : warning ? `${warning} to look at` : "All good"}
-            </span>
-            <span className="field__hint">
-              {checks.length} checks{repairable > 0 && `, ${repairable} of which the server can repair itself`}
-            </span>
-          </div>
-          <span className="spacer" />
-          <Button icon={RefreshCw} onClick={() => void client.invalidateQueries({ queryKey: ["health"] })} busy={health.isFetching}>
-            Run again
-          </Button>
-          <Button icon={Wrench} variant="primary" busy={running === "all"} disabled={fix.isPending} onClick={() => run("all")}>
-            Repair everything
-          </Button>
-        </div>
+    <Page>
+      <PageHeader
+        icon={Stethoscope}
+        title="Health"
+        sub={`${headline} · ${checks.length} checks`}
+        actions={
+          <>
+            <Button size="sm" icon={RefreshCw} onClick={() => void client.invalidateQueries({ queryKey: ["health"] })} busy={health.isFetching}>
+              Run again
+            </Button>
+            <Button
+              size="sm"
+              icon={Wrench}
+              variant="primary"
+              busy={running === "all"}
+              disabled={fix.isPending || readOnly || repairable === 0}
+              title={readOnly ? "This token is read-only" : repairable === 0 ? "Nothing to repair" : undefined}
+              onClick={() => run("all")}
+            >
+              Repair everything
+            </Button>
+          </>
+        }
+      />
+
+      <PageBody>
+        <Panel title="Where this instance stands" icon={Stethoscope}>
+          <DonutChart
+            slices={composition}
+            tones={statusTones}
+            centre={headline}
+            caption={`of ${checks.length}`}
+            ariaLabel="Checks by state"
+          />
+          <p className="field__hint">
+            {repairable > 0
+              ? `${repairable} of these the server can repair itself. A repair removes expired rows, reclaims space or restores a row that should always have been there — it is safe to run twice, and it never touches anybody's work.`
+              : "Nothing here needs a repair. The ones marked not applicable are checks for features this instance doesn't have turned on."}
+          </p>
+        </Panel>
 
         <Panel flush>
           {groups.map((g) => (
@@ -123,7 +175,14 @@ export function HealthPage() {
                     )}
                     {c.fix && (
                       <div className="check__fix">
-                        <Button size="sm" icon={Wrench} busy={running === c.id} disabled={fix.isPending} onClick={() => run(c.id)}>
+                        <Button
+                          size="sm"
+                          icon={Wrench}
+                          busy={running === c.id}
+                          disabled={fix.isPending || readOnly}
+                          title={readOnly ? "This token is read-only" : undefined}
+                          onClick={() => run(c.id)}
+                        >
                           Repair
                         </Button>
                         <span className="check__fix-text">{c.fix}</span>
@@ -145,7 +204,7 @@ export function HealthPage() {
             instead, which is the one to reach for when nothing answers at all.
           </p>
         </Panel>
-      </div>
-    </div>
+      </PageBody>
+    </Page>
   );
 }

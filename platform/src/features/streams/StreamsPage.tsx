@@ -14,13 +14,16 @@
 // shortened form; the whole thing is behind a click, so a screenshot of this
 // page doesn't hand out a working endpoint.
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Eye, EyeOff, Radio } from "lucide-react";
 import { api, describeError } from "@/lib/ipc";
 import { ago, count, day } from "@/lib/format";
+import type { Stream } from "@/lib/types";
 import { Button, IconButton } from "@/components/ui/Button";
-import { Badge, Empty, Loading, Panel, Switch } from "@/components/ui/Controls";
+import { Badge, Empty, Loading, Panel, Stat, Switch } from "@/components/ui/Controls";
+import { Page, PageBody, PageHeader } from "@/components/layout/Page";
+import { BarsChart } from "@/components/charts";
 import { toastError, toastOk } from "@/stores/toast";
 
 export function StreamsPage() {
@@ -49,17 +52,40 @@ export function StreamsPage() {
   const rows = streams.data?.streams ?? [];
   const failing = rows.filter((s) => s.failuresThisWeek > 0);
 
+  const enabled = rows.filter((s) => s.enabled).length;
+
   return (
-    <div className="page">
-      <div className="page__inner">
+    <Page>
+      <PageHeader
+        icon={Radio}
+        title="Streams"
+        sub={rows.length ? `${enabled} of ${rows.length} on` : undefined}
+        actions={
+          <Button
+            size="sm"
+            onClick={() => {
+              const on = rows.filter((s) => s.enabled);
+              if (!on.length) return toastOk("Nothing is enabled.");
+              for (const s of on) toggle.mutate({ id: s.fullId, enabled: false });
+            }}
+            disabled={!rows.some((s) => s.enabled)}
+          >
+            Disable every stream
+          </Button>
+        }
+      />
+
+      <PageBody>
         {failing.length > 0 && (
-          <Panel title={`${failing.length} stream${failing.length === 1 ? " is" : "s are"} refusing submissions`}>
+          <Panel title={`${failing.length} stream${failing.length === 1 ? " is" : "s are"} refusing submissions`} icon={Radio}>
             <p className="field__hint">
               A failure is a submission the server turned away: a wrong signature, a body that didn&rsquo;t fit the stream&rsquo;s shape, or
               a rate limit. The delivery log in Kern says which, per submission, for whoever owns the workspace.
             </p>
           </Panel>
         )}
+
+        <Busiest streams={rows} />
 
         <Panel flush>
           {streams.isLoading ? (
@@ -123,23 +149,50 @@ export function StreamsPage() {
             Turning it off here refuses every submission immediately, which is the fastest thing you can do and costs the workspace
             nothing permanent — its configuration, its secret and its delivery log are untouched. For a rate problem across the whole
             instance rather than one endpoint, the ceilings are <code className="mono">STREAM_MAX_PER_HOUR</code> and{" "}
-            <code className="mono">STREAM_MAX_BODY_BYTES</code> in <code className="mono">.env</code>, which need a restart.
+            <code className="mono">STREAM_MAX_BODY_BYTES</code> in <code className="mono">.env</code>, which need a restart. The switch for
+            every endpoint at once is in this page&rsquo;s header.
           </p>
-          <div className="row">
-            <Button
-              size="sm"
-              onClick={() => {
-                const on = rows.filter((s) => s.enabled);
-                if (!on.length) return toastOk("Nothing is enabled.");
-                for (const s of on) toggle.mutate({ id: s.fullId, enabled: false });
-              }}
-              disabled={!rows.some((s) => s.enabled)}
-            >
-              Disable every stream
-            </Button>
-          </div>
         </Panel>
+      </PageBody>
+    </Page>
+  );
+}
+
+/**
+ * Which endpoints are actually carrying the traffic, as a bar per endpoint.
+ *
+ * Deliveries are a lifetime count, so this is "who has been busiest", not
+ * "who is busy now" - which is the question worth asking when deciding whether
+ * an endpoint is worth the attention it is costing.
+ */
+function Busiest({ streams }: { streams: Stream[] }) {
+  const top = useMemo(
+    () =>
+      [...streams]
+        .filter((s) => s.deliveries > 0)
+        .sort((a, b) => b.deliveries - a.deliveries)
+        .slice(0, 8),
+    [streams],
+  );
+
+  if (top.length < 2) return null;
+
+  const delivered = streams.reduce((sum, s) => sum + s.deliveries, 0);
+  const failures = streams.reduce((sum, s) => sum + s.failuresThisWeek, 0);
+  const tip = (index: number) => {
+    const s = top[index]!;
+    const failed = s.failuresThisWeek ? ` · ${count(s.failuresThisWeek)} refused this week` : "";
+    return `${count(s.deliveries)} delivered${failed} · ${s.workspace.name}`;
+  };
+
+  return (
+    <Panel title="Busiest endpoints" icon={Radio}>
+      <div className="stat-row">
+        <Stat label="Delivered" value={count(delivered)} sub="since each was created" />
+        <Stat label="Refused this week" value={count(failures)} />
+        <Stat label="Endpoints" value={count(streams.length)} />
       </div>
-    </div>
+      <BarsChart labels={top.map((s) => s.name)} values={top.map((s) => s.deliveries)} tip={tip} ariaLabel="Streams by deliveries" />
+    </Panel>
   );
 }

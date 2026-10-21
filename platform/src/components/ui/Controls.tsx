@@ -69,15 +69,29 @@ export function Dot({ tone }: { tone: "ok" | "warn" | "fail" | "live" | "idle" }
   return <span className={`dot ${tone !== "idle" ? `dot--${tone}` : ""}`.trim()} />;
 }
 
-export function Stat({ label, value, sub }: { label: string; value: ReactNode; sub?: ReactNode }) {
+export function Stat({ label, value, sub, icon: Icon }: { label: string; value: ReactNode; sub?: ReactNode; icon?: LucideIcon }) {
   return (
     <div className="stat">
-      <span className="stat__label">{label}</span>
+      <span className="stat__label">
+        {Icon && <Icon strokeWidth={1.75} />}
+        {label}
+      </span>
       <span className="stat__value">{value}</span>
       {sub ? <span className="stat__sub">{sub}</span> : null}
     </div>
   );
 }
+
+/** How far through something is: keys used of keys issued, a quota. */
+export function Progress({ value, max, label }: { value: number; max: number; label: string }) {
+  const share = max > 0 ? Math.min(100, Math.max(0, (value / max) * 100)) : 0;
+  return (
+    <div className="progress" role="progressbar" aria-label={label} aria-valuenow={value} aria-valuemin={0} aria-valuemax={max}>
+      <span className="progress__bar" style={{ width: `${share}%` }} />
+    </div>
+  );
+}
+
 
 export function Empty({ icon: Icon, title, children, compact }: { icon?: LucideIcon; title?: string; children?: ReactNode; compact?: boolean }) {
   return (
@@ -110,15 +124,18 @@ export function Problem({ title, detail, children }: { title: string; detail?: s
   );
 }
 
-export function Segmented<T extends string>({ value, options, onChange }: {
+export function Segmented<T extends string>({ value, options, onChange, size = "md", ariaLabel }: {
   value: T;
-  options: { value: T; label: string }[];
+  options: { value: T; label: string; icon?: LucideIcon }[];
   onChange: (next: T) => void;
+  size?: "md" | "sm";
+  ariaLabel?: string;
 }) {
   return (
-    <div className="segmented" role="tablist">
+    <div className={`segmented ${size === "sm" ? "segmented--sm" : ""}`.trim()} role="tablist" aria-label={ariaLabel}>
       {options.map((o) => (
         <button key={o.value} type="button" role="tab" aria-selected={value === o.value} data-active={value === o.value} onClick={() => onChange(o.value)}>
+          {o.icon && <o.icon strokeWidth={1.75} />}
           {o.label}
         </button>
       ))}

@@ -5,8 +5,13 @@
 
 /* ================================================================
    The shell: a server picker and navigation on the left, one page on
-   the right. Kern's proportions, so the two sit side by side without
-   looking like different products.
+   the right.
+
+   This is Kern's shell, structure and all: the same 236px rail that
+   collapses to an icon strip, the same 46px header on every page with
+   the title and the page's own actions in it, the same scrolling body
+   underneath. The two apps are meant to read as one product, and a
+   page here is laid out the way a page there is.
    ================================================================ */
 
 .shell {
@@ -26,15 +31,23 @@
   flex-direction: column;
   background: var(--bg-sunken);
   border-right: 1px solid var(--border-subtle);
+  transition: width var(--t-panel) var(--ease);
   overflow: hidden;
+}
+.sidebar[data-collapsed="true"] {
+  width: 52px;
 }
 .sidebar__top {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
   height: 46px;
-  padding: 0 10px 0 12px;
+  padding: 0 8px 0 12px;
   flex-shrink: 0;
+}
+.sidebar[data-collapsed="true"] .sidebar__top {
+  padding: 0;
+  justify-content: center;
 }
 .brand {
   display: flex;
@@ -42,9 +55,13 @@
   gap: 8px;
   min-width: 0;
   flex: 1;
-  font-size: calc(15px * var(--fs));
+  font-size: calc(17px * var(--fs));
   font-weight: 650;
   letter-spacing: -0.015em;
+}
+/* Collapsed: shrink to the mark, so centring the top bar actually centres it. */
+.sidebar[data-collapsed="true"] .brand {
+  flex: none;
 }
 .brand__mark {
   width: 20px;
@@ -69,16 +86,27 @@
 .sidebar__section {
   margin-top: 14px;
 }
+.sidebar__section:first-child {
+  margin-top: 2px;
+}
 .sidebar__section-head {
   display: flex;
   align-items: center;
   height: 26px;
   padding: 0 8px;
-  font-size: var(--fs-2xs);
+  gap: 4px;
+  color: var(--text-3);
+  font-size: var(--fs-xs);
   font-weight: 600;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--text-4);
+}
+.sidebar[data-collapsed="true"] .sidebar__section-head,
+.sidebar[data-collapsed="true"] .nav-item__label,
+.sidebar[data-collapsed="true"] .nav-item__count,
+.sidebar[data-collapsed="true"] .picker__text,
+.sidebar[data-collapsed="true"] .picker__button > svg:last-child,
+.sidebar[data-collapsed="true"] .sidebar__note,
+.sidebar[data-collapsed="true"] .brand > .truncate {
+  display: none;
 }
 
 .nav-item {
@@ -127,12 +155,58 @@
   color: var(--text-3);
   font-variant-numeric: tabular-nums;
 }
+/* A check that needs attention shows on the rail, collapsed or not. */
+.nav-item__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.sidebar[data-collapsed="true"] .nav-item {
+  justify-content: center;
+  padding: 0;
+}
+.sidebar[data-collapsed="true"] .nav-item__dot {
+  position: absolute;
+  top: 5px;
+  right: 6px;
+}
+
+/* How this server is being reached, under the picker: a management token is
+   the whole instance, an account session is workspace keys only, and which
+   one you have decides what the rest of the sidebar even offers. */
+.sidebar__note {
+  margin: 0 8px 8px;
+  padding: 7px 9px;
+  border-radius: var(--r-md);
+  background: var(--surface);
+  border: 1px solid var(--border-subtle);
+  font-size: var(--fs-xs);
+  color: var(--text-3);
+  line-height: 1.5;
+  display: flex;
+  gap: 7px;
+  align-items: flex-start;
+}
+.sidebar__note > svg {
+  width: 13px;
+  height: 13px;
+  margin-top: 2px;
+  color: var(--text-4);
+}
+.sidebar__note b {
+  color: var(--text-2);
+  font-weight: 550;
+}
 
 /* ---------- The server picker, at the top of the sidebar */
 .picker {
   position: relative;
   padding: 0 8px 8px;
   flex-shrink: 0;
+}
+.sidebar[data-collapsed="true"] .picker {
+  padding: 0 8px 8px;
 }
 .picker__button {
   display: flex;
@@ -145,6 +219,10 @@
   background: var(--surface);
   text-align: left;
   transition: background var(--t-hover) var(--ease), border-color var(--t-hover) var(--ease);
+}
+.sidebar[data-collapsed="true"] .picker__button {
+  justify-content: center;
+  padding: 7px 0;
 }
 .picker__button:hover {
   background: var(--surface-2);
@@ -181,32 +259,34 @@
   position: absolute;
   top: calc(100% - 4px);
   left: 8px;
-  right: 8px;
+  min-width: calc(100% - 16px);
   z-index: 40;
   padding: 4px;
   border-radius: var(--r-lg);
   background: var(--surface-2);
-  border: 1px solid var(--border);
   box-shadow: var(--shadow-pop);
   animation: pop-in var(--t-menu) var(--ease-out);
   max-height: 60vh;
   overflow-y: auto;
+}
+.sidebar[data-collapsed="true"] .picker__menu {
+  min-width: 230px;
 }
 .picker__item {
   display: flex;
   align-items: center;
   gap: 8px;
   width: 100%;
-  padding: 6px 8px;
+  padding: 0 8px;
+  height: calc(var(--row-h) - 2px);
   border-radius: var(--r-sm);
   text-align: left;
   font-size: var(--fs-sm);
-  color: var(--text-2);
-  transition: background var(--t-hover) var(--ease), color var(--t-hover) var(--ease);
+  color: var(--text);
+  transition: background var(--t-hover) var(--ease);
 }
 .picker__item:hover {
-  background: var(--hover);
-  color: var(--text);
+  background: var(--hover-strong);
 }
 .picker__item > svg {
   width: var(--icon-sm);
@@ -216,61 +296,87 @@
 .picker__sep {
   height: 1px;
   background: var(--divider);
-  margin: 4px 2px;
+  margin: 4px -4px;
 }
 
-/* ---------- The page area */
+/* ================================================================
+   The page area. Kern's: one header, one scrolling body.
+   ================================================================ */
+
 .workspace {
   flex: 1;
   min-width: 0;
+  height: 100%;
   display: flex;
   flex-direction: column;
+  background: var(--bg);
+  position: relative;
   overflow: hidden;
-}
-.topbar {
-  display: flex;
-  align-items: center;
-  gap: var(--gap);
-  height: 46px;
-  padding: 0 16px;
-  border-bottom: 1px solid var(--border-subtle);
-  flex-shrink: 0;
-}
-.topbar__title {
-  font-size: var(--fs-lg);
-  font-weight: 600;
-  letter-spacing: -0.01em;
-}
-.topbar__sub {
-  font-size: var(--fs-sm);
-  color: var(--text-3);
 }
 .page {
   flex: 1;
-  overflow-y: auto;
-  padding: 18px 20px 48px;
-}
-.page__inner {
-  max-width: 1040px;
-  margin: 0 auto;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 18px;
 }
-.page__head {
+.page-header {
   display: flex;
   align-items: center;
-  gap: var(--gap);
-  min-height: 28px;
+  gap: 10px;
+  min-height: 46px;
+  padding: 0 12px 0 20px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border-subtle);
 }
-.page__head h2 {
+.page-header__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
   font-size: var(--fs-lg);
   font-weight: 600;
   letter-spacing: -0.01em;
 }
-.page__lede {
+.page-header__title > svg {
+  width: 17px;
+  height: 17px;
+  color: var(--text-3);
+}
+.page-header__sub {
+  color: var(--text-3);
   font-size: var(--fs-sm);
-  color: var(--text-2);
-  line-height: 1.6;
-  max-width: 68ch;
+  white-space: nowrap;
+}
+.page-header__actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  padding: 6px 0;
+}
+.page-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+.page-body--pad {
+  padding: 16px 20px 40px;
+}
+/* Prose and forms, rather than tables: a column nobody has to track across. */
+.page-body--readable {
+  max-width: 860px;
+}
+
+/* The vertical rhythm inside a page body, and the cap that stops a table
+   stretching to a 2000px window. */
+.stack {
+  max-width: 1180px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.stack--narrow {
+  max-width: 860px;
 }

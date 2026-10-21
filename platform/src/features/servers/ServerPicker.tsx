@@ -21,7 +21,13 @@ import { toastError } from "@/stores/toast";
 import { useRouter } from "@/stores/router";
 import { AddServer } from "./AddServer";
 
-export function ServerPicker({ servers, current, online }: { servers: Server[]; current: Server; online: boolean }) {
+export function ServerPicker({ servers, current, online, collapsed = false }: {
+  servers: Server[];
+  current: Server;
+  online: boolean;
+  /** On the collapsed rail only the dot is left, so the whole button is the dot. */
+  collapsed?: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const [adding, setAdding] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -59,7 +65,13 @@ export function ServerPicker({ servers, current, online }: { servers: Server[]; 
 
   return (
     <div className="picker" ref={ref}>
-      <button className="picker__button" onClick={() => setOpen((v) => !v)} aria-haspopup="listbox" aria-expanded={open}>
+      <button
+        className="picker__button"
+        onClick={() => setOpen((v) => !v)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        title={collapsed ? `${label} — ${host(current.url)}` : undefined}
+      >
         <Dot tone={online ? "live" : "idle"} />
         <span className="picker__text">
           <span className="picker__name">{label}</span>

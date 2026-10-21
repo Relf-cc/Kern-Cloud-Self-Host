@@ -24,7 +24,10 @@ export default defineConfig({
     chunkSizeWarningLimit: 700,
   },
   test: {
+    // Node by default, because most of what is worth testing here is pure.
+    // The chart tests need a DOM and say so with a `@vitest-environment`
+    // docblock of their own rather than making every test pay for jsdom.
     environment: "node",
-    include: ["src/**/*.test.ts"],
+    include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
   },
 });

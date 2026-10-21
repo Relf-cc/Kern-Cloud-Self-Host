@@ -27,6 +27,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  min-height: 22px;
 }
 .panel__title > svg {
   width: var(--icon-sm);
@@ -36,27 +37,55 @@
 .panel__pad {
   padding: 12px 14px;
 }
+/* A panel that is mostly a table: the title needs a rule under it, because
+   the table's own header row would otherwise float. */
+.panel--flush > .panel__title {
+  border-bottom: 1px solid var(--divider);
+}
+.panel__title .badge {
+  font-weight: 500;
+}
 
-/* ---------- Statistics */
+/* A side-by-side pair of panels that should stay equal width. */
+.panel-pair {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+
+/* ---------- Statistics.
+   Kern's figure typography - a big tabular number, a quiet label, no small
+   capitals - in a card, because an administrator reads these as a row of
+   gauges rather than as running text. */
 .stat-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(168px, 1fr));
   gap: 10px;
 }
 .stat {
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  padding: 12px 14px;
+  gap: 2px;
+  padding: 11px 13px;
   border-radius: var(--r-lg);
   background: var(--surface);
   border: 1px solid var(--border-subtle);
+  transition: border-color var(--t-hover) var(--ease);
+}
+.stat:hover {
+  border-color: var(--border);
 }
 .stat__label {
-  font-size: var(--fs-2xs);
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  font-size: var(--fs-xs);
+  color: var(--text-3);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.stat__label > svg {
+  width: 13px;
+  height: 13px;
   color: var(--text-4);
 }
 .stat__value {
@@ -64,11 +93,155 @@
   font-weight: 600;
   letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
-  line-height: 1.2;
+  line-height: 1.25;
 }
 .stat__sub {
   font-size: var(--fs-xs);
   color: var(--text-3);
+  line-height: 1.5;
+}
+/* Bare figures in a row inside a panel, with no card around each. */
+.stat-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 22px;
+}
+.stat-row .stat {
+  padding: 0;
+  border: none;
+  background: none;
+  min-width: 64px;
+}
+.stat-row .stat__value {
+  font-size: var(--fs-xl);
+}
+
+/* ================================================================
+   Charts
+   ================================================================ */
+
+/* The canvas's box. Chart.js sizes to its parent, so the parent is what
+   carries the height - never the canvas element. */
+.chart {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+}
+.chart canvas {
+  display: block;
+}
+
+/* A measure above its own chart: what it is on the left, the reading on the
+   right, which is where the crosshair's figure lands. */
+.chart-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 20px;
+}
+.chart-head__label {
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+}
+.chart-head__value {
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.chart-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.chart-stack__item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* ---------- The ring, and the legend that does the reading.
+   The legend is not optional furniture: these tones are greyscale, so the
+   figures beside them are what identify a slice. See DonutChart.tsx. */
+.donut {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+.donut__ring {
+  position: relative;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+}
+.donut__empty {
+  border-radius: 50%;
+  border: 2px dashed var(--border);
+}
+.donut__centre {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  pointer-events: none;
+  text-align: center;
+  padding: 0 14px;
+}
+.donut__total {
+  font-size: var(--fs-lg);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+.donut__caption {
+  font-size: var(--fs-2xs);
+  color: var(--text-3);
+}
+.donut-legend {
+  flex: 1 1 200px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.donut-legend__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 6px;
+  margin: 0 -6px;
+  border-radius: var(--r-sm);
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+  transition: background var(--t-hover) var(--ease), opacity var(--t-hover) var(--ease);
+}
+.donut-legend__row[data-active="true"] {
+  background: var(--hover);
+  color: var(--text);
+}
+.donut-legend__row[data-dim="true"] {
+  opacity: 0.45;
+}
+.donut-legend__key {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+.donut-legend__share {
+  font-size: var(--fs-xs);
+  color: var(--text-4);
+  min-width: 38px;
+  text-align: right;
+}
+.donut-legend__value {
+  color: var(--text);
+  min-width: 62px;
+  text-align: right;
 }
 
 /* ---------- The identity strip at the top of Overview */
@@ -76,19 +249,20 @@
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 16px;
+  padding: 15px 16px;
   border-radius: var(--r-lg);
   background: var(--surface);
   border: 1px solid var(--border-subtle);
+  flex-wrap: wrap;
 }
 .instance__mark {
-  width: 42px;
-  height: 42px;
+  width: 40px;
+  height: 40px;
   border-radius: var(--r-md);
   flex-shrink: 0;
 }
 .instance__text {
-  flex: 1;
+  flex: 1 1 260px;
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -103,14 +277,25 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px 12px;
+  gap: 4px 12px;
   font-size: var(--fs-sm);
   color: var(--text-3);
+}
+.instance__meta > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 .instance__url {
   font-family: var(--font-mono);
   font-size: var(--fs-sm);
   color: var(--text-2);
+}
+.instance__side {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
 }
 
 /* ---------- Health checks */
@@ -181,61 +366,25 @@
   align-items: center;
   gap: 8px;
   margin-top: 2px;
+  flex-wrap: wrap;
 }
 .check__fix-text {
   font-size: var(--fs-xs);
   color: var(--text-3);
 }
 .check__group {
-  padding: 10px 14px 4px;
-  font-size: var(--fs-2xs);
+  padding: 9px 14px 5px;
+  font-size: var(--fs-xs);
   font-weight: 600;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--text-4);
+  color: var(--text-3);
   border-top: 1px solid var(--divider);
+  background: var(--surface-2);
 }
 .check__group:first-child {
   border-top: none;
 }
 
-/* ---------- Toolbar above a list */
-.toolbar {
-  display: flex;
-  align-items: center;
-  gap: var(--gap);
-  flex-wrap: wrap;
-}
-.toolbar .input-wrap {
-  flex: 1;
-  min-width: 180px;
-  max-width: 320px;
-}
-.segmented {
-  display: inline-flex;
-  padding: 2px;
-  border-radius: var(--r-md);
-  background: var(--surface-3);
-  border: 1px solid var(--border-subtle);
-}
-.segmented button {
-  height: calc(var(--control-h) - 6px);
-  padding: 0 10px;
-  border-radius: var(--r-sm);
-  font-size: var(--fs-xs);
-  color: var(--text-3);
-  transition: background var(--t-hover) var(--ease), color var(--t-hover) var(--ease);
-}
-.segmented button:hover {
-  color: var(--text);
-}
-.segmented button[data-active="true"] {
-  background: var(--surface);
-  color: var(--text);
-  box-shadow: var(--shadow-sm);
-}
-
-/* ---------- Detail rows (a drawer beside a list) */
+/* ---------- A list with a panel beside it */
 .detail {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(300px, 380px);
@@ -246,6 +395,12 @@
   .detail {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+.detail__side {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
 }
 .kv {
   display: grid;
@@ -288,11 +443,12 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
 }
 .set-row__hint {
   font-size: var(--fs-xs);
   color: var(--text-3);
-  line-height: 1.5;
+  line-height: 1.55;
 }
 .set-row__control {
   flex: 0 0 auto;
@@ -300,11 +456,82 @@
   align-items: center;
   gap: 8px;
   min-width: 200px;
+  max-width: 100%;
   justify-content: flex-end;
+  margin-left: auto;
+  flex-wrap: wrap;
 }
 .set-row__control .input,
 .set-row__control .select {
   width: 200px;
+}
+
+/* ---------- How this app looks, on the Settings page.
+   The swatch is the theme it sets, drawn in that theme's own colours, so the
+   choice is shown rather than described. */
+.swatches {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.swatch {
+  width: 58px;
+  padding: 0;
+  border-radius: var(--r-md);
+  border: 1px solid var(--border);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transition: border-color var(--t-hover) var(--ease), transform var(--t-press) var(--ease);
+}
+.swatch:hover {
+  border-color: var(--border-strong);
+}
+.swatch:active {
+  transform: scale(0.98);
+}
+.swatch[data-active="true"] {
+  border-color: var(--accent-line);
+  box-shadow: 0 0 0 1px var(--accent-line);
+}
+.swatch__face {
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+}
+.swatch__face[data-theme="dark"] {
+  background: #111111;
+}
+.swatch__face[data-theme="light"] {
+  background: #f6f6f6;
+}
+.swatch__bar {
+  width: 16px;
+  height: 3px;
+  border-radius: 2px;
+}
+.swatch__face[data-theme="dark"] .swatch__bar {
+  background: #3a3a3a;
+}
+.swatch__face[data-theme="dark"] .swatch__bar:first-child {
+  background: #ededed;
+}
+.swatch__face[data-theme="light"] .swatch__bar {
+  background: #cfcfcf;
+}
+.swatch__face[data-theme="light"] .swatch__bar:first-child {
+  background: #171717;
+}
+.swatch__label {
+  font-size: var(--fs-2xs);
+  color: var(--text-3);
+  padding: 4px 0;
+  text-align: center;
+}
+.swatch[data-active="true"] .swatch__label {
+  color: var(--text);
 }
 
 /* ---------- The log view */
@@ -317,7 +544,7 @@
   border: 1px solid var(--border-subtle);
   padding: 10px 12px;
   overflow: auto;
-  max-height: calc(100vh - 230px);
+  max-height: calc(100vh - 260px);
   user-select: text;
   cursor: text;
 }
@@ -326,6 +553,11 @@
   gap: 10px;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+  padding: 0 2px;
+  border-radius: var(--r-xs);
+}
+.log__line:hover {
+  background: var(--hover);
 }
 .log__time {
   color: var(--text-4);
@@ -347,6 +579,13 @@
   font-family: var(--font-mono);
   font-size: var(--fs-xs);
   white-space: nowrap;
+}
+.console__out .table th {
+  position: sticky;
+  top: 0;
+  background: var(--surface);
+  padding-top: 8px;
+  z-index: 1;
 }
 
 /* ---------- Welcome, when no server has been added yet */
@@ -428,7 +667,10 @@
   margin-top: 1px;
   font-variant-numeric: tabular-nums;
 }
-.welcome code {
+.welcome code,
+.panel code.mono,
+.set-row code.mono,
+.field__hint code.mono {
   font-family: var(--font-mono);
   font-size: 0.92em;
   background: var(--surface-3);

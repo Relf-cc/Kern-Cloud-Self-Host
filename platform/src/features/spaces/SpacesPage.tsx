@@ -11,7 +11,7 @@
 // holds four thousand tasks and needs eight gigabytes, and cannot read one of
 // those tasks.
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Database, Search, Trash2 } from "lucide-react";
 import { api, describeError } from "@/lib/ipc";
@@ -19,6 +19,8 @@ import { bytes, count, day, sentence } from "@/lib/format";
 import type { Space } from "@/lib/types";
 import { Button } from "@/components/ui/Button";
 import { Badge, Empty, KeyValue, Loading, Panel, Segmented } from "@/components/ui/Controls";
+import { Page, PageBody, PageHeader } from "@/components/layout/Page";
+import { BarsChart } from "@/components/charts";
 import { ConfirmDialog } from "@/components/ui/Dialog";
 import { toastError, toastOk } from "@/stores/toast";
 import { useRouter } from "@/stores/router";
@@ -40,28 +42,37 @@ export function SpacesPage() {
   const rows = spaces.data?.spaces ?? [];
 
   return (
-    <div className="page">
-      <div className="page__inner">
-        <div className="toolbar">
-          <div className="input-wrap">
-            <Search strokeWidth={1.75} />
-            <input className="input" placeholder="Search by name" value={query} onChange={(e) => setQuery(e.target.value)} />
-          </div>
-          <Segmented
-            value={kind}
-            onChange={setKind}
-            options={[
-              { value: "", label: "All" },
-              { value: "workspace", label: "Workspaces" },
-              { value: "personal", label: "Personal" },
-            ]}
-          />
-          <Button size="sm" variant={showDeleted ? "primary" : "default"} onClick={() => setShowDeleted((v) => !v)}>
-            Include deleted
-          </Button>
-          <span className="spacer" />
-          {spaces.data && <span className="field__hint">{rows.length} shown</span>}
-        </div>
+    <Page>
+      <PageHeader
+        icon={Database}
+        title="Spaces"
+        sub={spaces.data ? `${count(rows.length)} shown` : undefined}
+        actions={
+          <>
+            <div className="input-wrap" style={{ width: 220 }}>
+              <Search strokeWidth={1.75} />
+              <input className="input" placeholder="Search by name" value={query} onChange={(e) => setQuery(e.target.value)} />
+            </div>
+            <Segmented
+              size="sm"
+              ariaLabel="Which spaces"
+              value={kind}
+              onChange={setKind}
+              options={[
+                { value: "", label: "All" },
+                { value: "workspace", label: "Workspaces" },
+                { value: "personal", label: "Personal" },
+              ]}
+            />
+            <Button size="sm" variant={showDeleted ? "primary" : "default"} onClick={() => setShowDeleted((v) => !v)}>
+              Include deleted
+            </Button>
+          </>
+        }
+      />
+
+      <PageBody>
+        <Biggest spaces={rows} />
 
         <div className="detail">
           <Panel flush>
@@ -83,7 +94,7 @@ export function SpacesPage() {
                 </thead>
                 <tbody>
                   {rows.map((s) => (
-                    <tr key={s.id} data-clickable="true" onClick={() => open(s.id)}>
+                    <tr key={s.id} data-clickable="true" data-selected={s.id === selection || undefined} onClick={() => open(s.id)}>
                       <td>
                         <div className="col">
                           <span className="row" style={{ gap: 7 }}>
@@ -104,24 +115,62 @@ export function SpacesPage() {
             )}
           </Panel>
 
-          {selection ? (
-            <SpaceDetail id={selection} space={rows.find((s) => s.id === selection)} onClose={() => open(null)} />
-          ) : (
-            <Panel title="About spaces">
-              <p className="field__hint">
-                Every account has one personal space, made the first time they sync. A workspace is a space with more than one member, and
-                the invitations that go with it. Both are replicated to each computer that opens them, so what is here is the copy everyone
-                else merges against.
-              </p>
-              <p className="field__hint">
-                A tombstone is a record someone deleted. They stay so other computers learn about the deletion, and clearing them early
-                would let a stale copy bring the record back.
-              </p>
-            </Panel>
-          )}
+          {/* The side column is one grid cell: a detail that is several panels
+              has to stack inside it rather than become cells of its own. */}
+          <div className="detail__side">
+            {selection ? (
+              <SpaceDetail id={selection} space={rows.find((s) => s.id === selection)} onClose={() => open(null)} />
+            ) : (
+              <Panel title="About spaces">
+                <p className="field__hint">
+                  Every account has one personal space, made the first time they sync. A workspace is a space with more than one member,
+                  and the invitations that go with it. Both are replicated to each computer that opens them, so what is here is the copy
+                  everyone else merges against.
+                </p>
+                <p className="field__hint">
+                  A tombstone is a record someone deleted. They stay so other computers learn about the deletion, and clearing them early
+                  would let a stale copy bring the record back.
+                </p>
+              </Panel>
+            )}
+          </div>
         </div>
-      </div>
-    </div>
+      </PageBody>
+    </Page>
+  );
+}
+
+/**
+ * The spaces carrying the most records, as a bar per space.
+ *
+ * It ranks whatever the filters above have left, which is the useful
+ * behaviour - narrow to workspaces and it ranks workspaces - so the heading
+ * says "listed" rather than implying it has seen the whole instance.
+ */
+function Biggest({ spaces }: { spaces: Space[] }) {
+  const top = useMemo(
+    () =>
+      [...spaces]
+        .filter((s) => s.records > 0)
+        .sort((a, b) => b.records - a.records)
+        .slice(0, 8),
+    [spaces],
+  );
+
+  if (top.length < 2) return null;
+
+  const labels = top.map((s) => s.name);
+  const values = top.map((s) => s.records);
+  const tip = (index: number) => {
+    const s = top[index]!;
+    const images = s.assetBytes ? ` · ${bytes(s.assetBytes)} of images` : "";
+    return `${count(s.records)} records · ${s.members} member${s.members === 1 ? "" : "s"}${images}`;
+  };
+
+  return (
+    <Panel title={`Biggest of the ${count(spaces.length)} listed`} icon={Database}>
+      <BarsChart labels={labels} values={values} tip={tip} ariaLabel="Spaces by record count" />
+    </Panel>
   );
 }
 

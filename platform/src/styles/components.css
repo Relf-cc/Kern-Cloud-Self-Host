@@ -4,7 +4,13 @@
  */
 
 /* ================================================================
-   Controls. Kern's, narrowed to the ones an administration app uses.
+   Controls: Kern's, narrowed to the ones an administration app uses.
+
+   Where Kern has a control, this file is the same control - same
+   heights, same tones, same transitions - so a button here and a
+   button there are the same button. Nothing in this app is uppercased
+   or letter-spaced; Kern's hierarchy is weight and tone, and small
+   capitals read as a different product.
    ================================================================ */
 
 /* ---------- Buttons */
@@ -204,40 +210,40 @@
 .field__hint {
   font-size: var(--fs-xs);
   color: var(--text-3);
-  line-height: 1.5;
+  line-height: 1.55;
 }
 .field__error {
   font-size: var(--fs-xs);
   color: var(--danger);
-  line-height: 1.5;
+  line-height: 1.55;
   white-space: pre-wrap;
 }
 
-/* ---------- Switch */
+/* ---------- Switch (Kern's geometry: 30x18, a 14px thumb) */
 .switch {
   position: relative;
-  width: 32px;
+  width: 30px;
   height: 18px;
   border-radius: 999px;
-  background: var(--surface-3);
-  border: 1px solid var(--border);
+  background: var(--border-strong);
   flex-shrink: 0;
-  transition: background var(--t-hover) var(--ease), border-color var(--t-hover) var(--ease);
+  transition: background var(--t-hover) var(--ease);
 }
 .switch::after {
   content: "";
   position: absolute;
   top: 2px;
-  left: 2px;
-  width: 12px;
-  height: 12px;
+  left: 0;
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
-  background: var(--text-3);
+  background: var(--text);
+  box-shadow: var(--shadow-sm);
+  transform: translateX(2px);
   transition: transform var(--t-press) var(--ease), background var(--t-hover) var(--ease);
 }
 .switch[data-on="true"] {
   background: var(--accent);
-  border-color: transparent;
 }
 .switch[data-on="true"]::after {
   transform: translateX(14px);
@@ -248,21 +254,102 @@
   pointer-events: none;
 }
 
-/* ---------- Badges and status dots */
+/* ---------- Segmented control */
+.segmented {
+  display: inline-flex;
+  padding: 2px;
+  gap: 2px;
+  border-radius: var(--r-md);
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+}
+.segmented button {
+  height: calc(var(--control-h) - 6px);
+  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: calc(var(--r-md) - 2px);
+  font-size: var(--fs-sm);
+  color: var(--text-3);
+  white-space: nowrap;
+  transition: background var(--t-hover) var(--ease), color var(--t-hover) var(--ease);
+}
+.segmented button:hover {
+  color: var(--text);
+}
+.segmented button[data-active="true"] {
+  background: var(--surface-3);
+  color: var(--text);
+  box-shadow: var(--shadow-sm), inset 0 0 0 1px var(--border);
+}
+.segmented--sm button {
+  height: calc(var(--control-h-sm) - 6px);
+  padding: 0 8px;
+  font-size: var(--fs-xs);
+}
+
+/* ---------- Tabs (compact underline, for a page's own sections) */
+.tabs {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  /* The header centres its children; tabs have to reach its bottom edge, which
+     is where their underline sits. */
+  align-self: stretch;
+  min-height: 46px;
+  margin-left: 6px;
+}
+.tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  font-size: var(--fs-sm);
+  color: var(--text-3);
+  border-radius: var(--r-sm);
+  transition: color var(--t-hover) var(--ease);
+}
+.tab svg {
+  width: var(--icon-sm);
+  height: var(--icon-sm);
+}
+.tab:hover {
+  color: var(--text);
+}
+.tab[data-active="true"] {
+  color: var(--text);
+}
+.tab[data-active="true"]::after {
+  content: "";
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: -1px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--accent-line);
+}
+
+/* ---------- Chips: a small state beside a name */
 .badge {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  height: 19px;
-  padding: 0 7px;
+  gap: 4px;
+  height: 20px;
+  padding: 0 6px;
   border-radius: var(--r-xs);
-  background: var(--surface-3);
-  color: var(--text-2);
-  font-size: var(--fs-2xs);
+  font-size: var(--fs-xs);
   font-weight: 500;
-  letter-spacing: 0.01em;
+  color: var(--text-2);
+  background: var(--hover);
   white-space: nowrap;
-  text-transform: uppercase;
+  max-width: 220px;
+}
+.badge svg {
+  width: 12px;
+  height: 12px;
 }
 .badge--ok {
   background: rgba(130, 180, 143, 0.14);
@@ -282,6 +369,8 @@
   color: var(--text-3);
 }
 
+/* ---------- Status dots. Never the only signal: a dot always sits beside
+   the word it is qualifying. */
 .dot {
   width: 7px;
   height: 7px;
@@ -316,6 +405,45 @@
   animation: none;
 }
 
+/* ---------- Keys, for the shortcuts a page mentions */
+.kbd {
+  display: inline-flex;
+  gap: 3px;
+  align-items: center;
+}
+.kbd kbd {
+  font-family: var(--font-sans);
+  font-size: var(--fs-2xs);
+  font-weight: 500;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--r-xs);
+  background: var(--hover-strong);
+  color: var(--text-2);
+  border: 1px solid var(--border);
+  border-bottom-width: 1.5px;
+}
+
+/* ---------- Progress */
+.progress {
+  position: relative;
+  height: 4px;
+  border-radius: 4px;
+  background: var(--hover-strong);
+  overflow: hidden;
+}
+.progress__bar {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 4px;
+  background: var(--accent);
+  transition: width var(--t-layout) var(--ease);
+}
+
 /* ---------- Empty and loading states */
 .empty {
   display: flex;
@@ -323,10 +451,11 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 36px 16px;
+  padding: 28px 16px;
   text-align: center;
   color: var(--text-3);
   font-size: var(--fs-sm);
+  line-height: 1.6;
 }
 .empty > svg {
   width: 20px;
@@ -339,13 +468,17 @@
   font-size: var(--fs-md);
 }
 .empty--compact {
-  padding: 16px 8px;
+  padding: 14px 8px;
+  gap: 6px;
 }
 
 .skeleton {
-  background: var(--surface-3);
+  background: var(--hover-strong);
   border-radius: var(--r-sm);
   animation: skeleton 1.4s ease-in-out infinite;
+}
+:root[data-motion="off"] .skeleton {
+  animation: none;
 }
 
 .spinner {
@@ -370,36 +503,43 @@
   display: grid;
   place-items: center;
   padding: 24px;
-  animation: fade-in var(--t-menu) var(--ease);
+  animation: fade-in var(--t-panel) var(--ease);
 }
 .dialog {
   width: 100%;
-  max-width: 460px;
+  max-width: 480px;
   max-height: calc(100vh - 80px);
   display: flex;
   flex-direction: column;
-  background: var(--surface);
-  border: 1px solid var(--border);
+  background: var(--surface-2);
   border-radius: var(--r-xl);
   box-shadow: var(--shadow-pop);
-  animation: pop-in var(--t-panel) var(--ease-out);
+  animation: dialog-in var(--t-panel) var(--ease-out);
+  overflow: hidden;
 }
 .dialog--wide {
   max-width: 680px;
+}
+@keyframes dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(calc(var(--enter-shift) * -1.5)) scale(var(--enter-scale));
+  }
 }
 .dialog__head {
   display: flex;
   align-items: center;
   gap: var(--gap);
-  padding: 14px 16px 10px;
+  padding: 14px 16px 4px;
 }
 .dialog__title {
   font-size: var(--fs-lg);
   font-weight: 600;
   letter-spacing: -0.01em;
+  min-width: 0;
 }
 .dialog__body {
-  padding: 4px 16px 16px;
+  padding: 10px 16px 14px;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -409,43 +549,42 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 12px 16px;
-  border-top: 1px solid var(--divider);
+  padding: 10px 16px 14px;
 }
 
-/* ---------- Toasts */
+/* ---------- Toasts (Kern's: bottom centre, newest nearest the edge) */
 .toaster {
   position: fixed;
-  right: 16px;
-  bottom: 16px;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
   z-index: 200;
   display: flex;
-  flex-direction: column;
+  flex-direction: column-reverse;
+  align-items: center;
   gap: 8px;
-  max-width: 420px;
+  max-width: min(520px, calc(100vw - 48px));
   pointer-events: none;
 }
 .toast {
   display: flex;
   align-items: flex-start;
   gap: 10px;
-  padding: 10px 12px;
-  border-radius: var(--r-md);
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  box-shadow: var(--shadow-md);
+  min-height: 36px;
+  padding: 8px 12px;
+  border-radius: var(--r-lg);
+  background: var(--surface-3);
+  box-shadow: var(--shadow-pop);
   font-size: var(--fs-sm);
+  line-height: 1.5;
   pointer-events: auto;
   animation: rise-in var(--t-panel) var(--ease-out);
 }
 .toast > svg {
   width: var(--icon-sm);
   height: var(--icon-sm);
-  margin-top: 1px;
-  color: var(--text-3);
-}
-.toast--error {
-  border-color: var(--danger);
+  margin-top: 2px;
+  color: var(--text-2);
 }
 .toast--error > svg {
   color: var(--danger);
@@ -468,11 +607,9 @@
 }
 .table th {
   text-align: left;
-  font-size: var(--fs-2xs);
+  font-size: var(--fs-xs);
   font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--text-4);
+  color: var(--text-3);
   padding: 0 10px 7px;
   white-space: nowrap;
 }
@@ -487,10 +624,17 @@
 .table tbody tr[data-clickable="true"]:hover {
   background: var(--hover);
 }
+/* The open row in a list with a panel beside it. */
+.table tbody tr[data-selected="true"] {
+  background: var(--selection);
+}
 .table td.right,
 .table th.right {
   text-align: right;
   font-variant-numeric: tabular-nums;
+}
+.table td.right {
+  white-space: nowrap;
 }
 .table__sub {
   color: var(--text-3);

@@ -14,11 +14,12 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useMutation } from "@tanstack/react-query";
-import { Megaphone, Pause, Play } from "lucide-react";
+import { FileText, Megaphone, Pause, Play } from "lucide-react";
 import { api, describeError } from "@/lib/ipc";
 import { ago, when } from "@/lib/format";
 import { Button } from "@/components/ui/Button";
 import { Empty, Field, Loading, Panel, Segmented } from "@/components/ui/Controls";
+import { Page, PageBody, PageHeader } from "@/components/layout/Page";
 import { Dialog } from "@/components/ui/Dialog";
 import { toastError, toastOk } from "@/stores/toast";
 
@@ -41,27 +42,35 @@ export function LogsPage() {
   const audit = useQuery({ queryKey: ["audit"], queryFn: api.admin.audit });
 
   return (
-    <div className="page">
-      <div className="page__inner">
-        <div className="toolbar">
-          <Segmented
-            value={level}
-            onChange={setLevel}
-            options={[
-              { value: "", label: "Everything" },
-              { value: "warn", label: "Warnings" },
-              { value: "error", label: "Errors" },
-            ]}
-          />
-          <Button size="sm" icon={following ? Pause : Play} onClick={() => setFollowing((v) => !v)}>
-            {following ? "Pause" : "Follow"}
-          </Button>
-          <span className="spacer" />
-          <Button size="sm" icon={Megaphone} onClick={() => setAnnouncing(true)}>
-            Tell everyone something
-          </Button>
-        </div>
+    <Page>
+      <PageHeader
+        icon={FileText}
+        title="Logs"
+        sub={following ? "following" : "paused"}
+        actions={
+          <>
+            <Segmented
+              size="sm"
+              ariaLabel="Which lines"
+              value={level}
+              onChange={setLevel}
+              options={[
+                { value: "", label: "Everything" },
+                { value: "warn", label: "Warnings" },
+                { value: "error", label: "Errors" },
+              ]}
+            />
+            <Button size="sm" icon={following ? Pause : Play} onClick={() => setFollowing((v) => !v)}>
+              {following ? "Pause" : "Follow"}
+            </Button>
+            <Button size="sm" icon={Megaphone} onClick={() => setAnnouncing(true)}>
+              Tell everyone something
+            </Button>
+          </>
+        }
+      />
 
+      <PageBody>
         <Panel
           title={logs.data ? `Server log · ${logs.data.held} line${logs.data.held === 1 ? "" : "s"} held` : "Server log"}
         >
@@ -134,10 +143,10 @@ export function LogsPage() {
             </table>
           )}
         </Panel>
-      </div>
+      </PageBody>
 
       {announcing && <NoticeDialog onClose={() => setAnnouncing(false)} />}
-    </div>
+    </Page>
   );
 }
 

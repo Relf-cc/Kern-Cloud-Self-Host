@@ -16,12 +16,13 @@
 
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { Play, Table2 } from "lucide-react";
+import { Play, Table2, Terminal } from "lucide-react";
 import { api, describeError } from "@/lib/ipc";
 import { count } from "@/lib/format";
 import type { QueryReply } from "@/lib/types";
 import { Button } from "@/components/ui/Button";
 import { Empty, Panel } from "@/components/ui/Controls";
+import { Page, PageBody, PageHeader } from "@/components/layout/Page";
 
 const EXAMPLES: { label: string; sql: string }[] = [
   { label: "Accounts by month", sql: `SELECT to_char("createdAt", 'YYYY-MM') AS month, count(*) AS accounts\nFROM "user" GROUP BY 1 ORDER BY 1 DESC` },
@@ -49,28 +50,17 @@ export function ConsolePage() {
   });
 
   return (
-    <div className="page">
-      <div className="page__inner">
-        <Panel title="Query">
-          <textarea
-            className="textarea textarea--mono"
-            rows={7}
-            value={sql}
-            spellCheck={false}
-            onChange={(e) => setSql(e.target.value)}
-            onKeyDown={(e) => {
-              if ((e.ctrlKey || e.metaKey) && e.key === "Enter" && sql.trim()) run.mutate();
-            }}
-          />
-          <div className="toolbar">
-            <Button variant="primary" icon={Play} busy={run.isPending} disabled={!sql.trim()} onClick={() => run.mutate()}>
-              Run
-            </Button>
-            <span className="field__hint">Ctrl+Enter · one SELECT, read-only, 10 second limit, 200 rows</span>
-            <span className="spacer" />
+    <Page>
+      <PageHeader
+        icon={Terminal}
+        title="Console"
+        sub="read-only"
+        actions={
+          <>
             <select
               className="select"
-              style={{ width: 200 }}
+              style={{ width: 190 }}
+              aria-label="An example query"
               value=""
               onChange={(e) => {
                 const found = EXAMPLES.find((x) => x.label === e.target.value);
@@ -88,6 +78,31 @@ export function ConsolePage() {
                 </option>
               ))}
             </select>
+            <Button size="sm" variant="primary" icon={Play} busy={run.isPending} disabled={!sql.trim()} onClick={() => run.mutate()}>
+              Run
+            </Button>
+          </>
+        }
+      />
+
+      <PageBody>
+        <Panel title="Query">
+          <textarea
+            className="textarea textarea--mono"
+            rows={7}
+            value={sql}
+            spellCheck={false}
+            onChange={(e) => setSql(e.target.value)}
+            onKeyDown={(e) => {
+              if ((e.ctrlKey || e.metaKey) && e.key === "Enter" && sql.trim()) run.mutate();
+            }}
+          />
+          <div className="row" style={{ flexWrap: "wrap" }}>
+            <span className="kbd">
+              <kbd>Ctrl</kbd>
+              <kbd>Enter</kbd>
+            </span>
+            <span className="field__hint">to run · one SELECT, read-only, a ten-second limit, 200 rows</span>
           </div>
           {error && <p className="field__error">{error}</p>}
         </Panel>
@@ -138,8 +153,8 @@ export function ConsolePage() {
             <code className="mono">kernctl query &quot;SELECT …&quot;</code>.
           </p>
         </Panel>
-      </div>
-    </div>
+      </PageBody>
+    </Page>
   );
 }
 

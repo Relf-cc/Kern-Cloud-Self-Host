@@ -14,17 +14,46 @@
 // Each editable row says where its value came from: "from .env" means nothing
 // has been stored, so the environment is still in charge. Clearing a stored
 // value hands it back.
+//
+// There is a third kind, behind the second tab, and it belongs to neither: how
+// this window looks. Kern offers the same choices over the same tokens, so the
+// two apps can be made to match - and because they are this computer's
+// preference rather than the instance's, they are kept here and never sent.
 
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Lock, RotateCcw, Save, Server } from "lucide-react";
+import { Lock, Monitor, Palette, RotateCcw, Save, Server, SlidersHorizontal } from "lucide-react";
 import { api, describeError } from "@/lib/ipc";
 import type { Registration, SettingKey, SettingsReply } from "@/lib/types";
 import { Button } from "@/components/ui/Button";
-import { Badge, Empty, Loading, Panel, Switch } from "@/components/ui/Controls";
+import { Badge, Empty, Loading, Panel, Segmented, Switch } from "@/components/ui/Controls";
+import { Page, PageBody, PageHeader, Tabs } from "@/components/layout/Page";
+import { useAppearance, type Density, type Motion, type Radius, type Theme } from "@/stores/appearance";
 import { toastError, toastOk } from "@/stores/toast";
 
+type Tab = "server" | "app";
+
 export function SettingsPage() {
+  const [tab, setTab] = useState<Tab>("server");
+
+  return (
+    <Page>
+      <PageHeader icon={SlidersHorizontal} title="Settings">
+        <Tabs
+          value={tab}
+          onChange={setTab}
+          options={[
+            { value: "server", label: "This server", icon: Server },
+            { value: "app", label: "This app", icon: Monitor },
+          ]}
+        />
+      </PageHeader>
+      <PageBody narrow>{tab === "server" ? <ServerSettings /> : <AppSettings />}</PageBody>
+    </Page>
+  );
+}
+
+function ServerSettings() {
   const client = useQueryClient();
   const settings = useQuery({ queryKey: ["settings"], queryFn: api.admin.settings });
 
@@ -40,178 +69,296 @@ export function SettingsPage() {
     onError: (e) => toastError(describeError(e)),
   });
 
-  if (settings.isLoading) return <div className="page"><Loading what="Asking the server" /></div>;
+  if (settings.isLoading) return <Loading what="Asking the server" />;
   if (settings.error || !settings.data) {
-    return (
-      <div className="page">
-        <Empty title="Couldn't read the settings">{describeError(settings.error)}</Empty>
-      </div>
-    );
+    return <Empty title="Couldn't read the settings">{describeError(settings.error)}</Empty>;
   }
 
   const d = settings.data;
   const set = (patch: Partial<Record<SettingKey, unknown>>) => save.mutate(patch);
 
   return (
-    <div className="page">
-      <div className="page__inner">
-        <Panel title="Changeable here" flush>
-          <TextRow
-            label="Instance name"
-            hint="What this server calls itself: in its emails, on its invite pages, and in the sidebar here."
-            value={d.settings.instanceName.value}
-            source={d.settings.instanceName.source}
-            busy={save.isPending}
-            onSave={(v) => set({ instanceName: v })}
-            onClear={() => set({ instanceName: null })}
-          />
+    <>
+      <Panel title="Changeable here" flush>
+        <TextRow
+          label="Instance name"
+          hint="What this server calls itself: in its emails, on its invite pages, and in the sidebar here."
+          value={d.settings.instanceName.value}
+          source={d.settings.instanceName.source}
+          busy={save.isPending}
+          onSave={(v) => set({ instanceName: v })}
+          onClear={() => set({ instanceName: null })}
+        />
 
-          <div className="set-row">
-            <div className="set-row__text">
-              <span className="set-row__label">
-                Who may sign up
-                <Source source={d.settings.registration.source} />
-              </span>
-              <span className="set-row__hint">
-                The first account is always allowed, whatever this says — otherwise nobody could start using a new server.
-              </span>
-            </div>
-            <div className="set-row__control">
-              <select
-                className="select"
-                value={d.settings.registration.value}
-                disabled={save.isPending}
-                onChange={(e) => set({ registration: e.target.value as Registration })}
-              >
-                <option value="open">Open — anyone who can reach it</option>
-                <option value="invite">Invitation only</option>
-                <option value="closed">Closed — nobody new</option>
-              </select>
-            </div>
+        <div className="set-row">
+          <div className="set-row__text">
+            <span className="set-row__label">
+              Who may sign up
+              <Source source={d.settings.registration.source} />
+            </span>
+            <span className="set-row__hint">
+              The first account is always allowed, whatever this says — otherwise nobody could start using a new server.
+            </span>
           </div>
+          <div className="set-row__control">
+            <select
+              className="select"
+              value={d.settings.registration.value}
+              disabled={save.isPending}
+              onChange={(e) => set({ registration: e.target.value as Registration })}
+            >
+              <option value="open">Open — anyone who can reach it</option>
+              <option value="invite">Invitation only</option>
+              <option value="closed">Closed — nobody new</option>
+            </select>
+          </div>
+        </div>
 
-          {d.settings.registration.value === "open" && (
-            <TextRow
-              label="Limit sign-ups to these domains"
-              hint="Comma separated, without the @. Empty means any address."
-              value={d.settings.allowedEmailDomains.value.join(", ")}
-              source={d.settings.allowedEmailDomains.source}
-              placeholder="example.com, example.org"
-              busy={save.isPending}
-              onSave={(v) => set({ allowedEmailDomains: v })}
-              onClear={() => set({ allowedEmailDomains: null })}
+        {d.settings.registration.value === "open" && (
+          <TextRow
+            label="Limit sign-ups to these domains"
+            hint="Comma separated, without the @. Empty means any address."
+            value={d.settings.allowedEmailDomains.value.join(", ")}
+            source={d.settings.allowedEmailDomains.source}
+            placeholder="example.com, example.org"
+            busy={save.isPending}
+            onSave={(v) => set({ allowedEmailDomains: v })}
+            onClear={() => set({ allowedEmailDomains: null })}
+          />
+        )}
+
+        <TextRow
+          label="Most accounts"
+          hint="A ceiling on how many this instance will hold. 0 for no limit."
+          value={String(d.settings.maxUsers.value)}
+          source={d.settings.maxUsers.source}
+          numeric
+          busy={save.isPending}
+          onSave={(v) => set({ maxUsers: Number(v) || 0 })}
+          onClear={() => set({ maxUsers: null })}
+        />
+
+        <TextRow
+          label="Support address"
+          hint="Shown in this instance's emails, so people know who to ask. Empty leaves it out."
+          value={d.settings.supportEmail.value}
+          source={d.settings.supportEmail.source}
+          placeholder="admin@example.com"
+          busy={save.isPending}
+          onSave={(v) => set({ supportEmail: v })}
+          onClear={() => set({ supportEmail: null })}
+        />
+
+        <TextRow
+          label="Notice on the sign-in screen"
+          hint="A line the Kern app shows people before they sign in. Empty for none."
+          value={d.settings.motd.value}
+          source={d.settings.motd.source}
+          placeholder="Maintenance on Sunday morning."
+          busy={save.isPending}
+          onSave={(v) => set({ motd: v })}
+          onClear={() => set({ motd: null })}
+        />
+
+        <div className="set-row">
+          <div className="set-row__text">
+            <span className="set-row__label">
+              Public share links and calendar feeds
+              <Source source={d.settings.sharesEnabled.source} />
+            </span>
+            <span className="set-row__hint">
+              Turning this off stops serving pages that are already published, as well as new ones.
+            </span>
+          </div>
+          <div className="set-row__control">
+            <Switch
+              checked={d.settings.sharesEnabled.value}
+              label="Allow publishing"
+              disabled={save.isPending}
+              onChange={(v) => set({ sharesEnabled: v })}
             />
-          )}
+          </div>
+        </div>
+      </Panel>
 
-          <TextRow
-            label="Most accounts"
-            hint="A ceiling on how many this instance will hold. 0 for no limit."
-            value={String(d.settings.maxUsers.value)}
-            source={d.settings.maxUsers.source}
-            numeric
-            busy={save.isPending}
-            onSave={(v) => set({ maxUsers: Number(v) || 0 })}
-            onClear={() => set({ maxUsers: null })}
-          />
+      <Panel title="From .env — needs a restart" icon={Lock} flush>
+        <EnvRow label="Public address" value={d.environment.publicUrl} hint="What invite links and stream endpoints are built from." mono />
+        <EnvRow label="What people type into Kern" value={d.environment.apiUrl} mono />
+        {d.environment.linkUrl !== d.environment.publicUrl && <EnvRow label="Invite links" value={d.environment.linkUrl} mono />}
+        {d.environment.streamsUrl !== d.environment.publicUrl && <EnvRow label="Stream endpoints" value={d.environment.streamsUrl} mono />}
+        <EnvRow label="Listening on" value={`${d.environment.host}:${d.environment.port}`} mono />
+        <EnvRow
+          label="Outgoing mail"
+          value={d.environment.mail.configured ? `${d.environment.mail.host}:${d.environment.mail.port} as ${d.environment.mail.from}` : "Not configured"}
+          hint={
+            d.environment.mail.configured
+              ? undefined
+              : "Verification codes and invitations are printed to the server log instead of sent. Nobody else can finish signing up until this is set."
+          }
+          warn={!d.environment.mail.configured}
+        />
+        <EnvRow
+          label="Email into streams"
+          value={d.environment.inboundEmail.enabled ? d.environment.inboundEmail.domain || "on" : "Off"}
+        />
+        <EnvRow
+          label="Management API"
+          value={d.environment.admin.localOnly ? "This machine only" : `Also ${d.environment.admin.allowFrom.join(", ") || "nothing listed"}`}
+          hint={
+            d.environment.admin.localOnly
+              ? "Which is why Kern Platform connects over 127.0.0.1 or an SSH tunnel."
+              : "ADMIN_LOCAL_ONLY is off. Keep ADMIN_ALLOW_FROM as narrow as you can."
+          }
+          warn={!d.environment.admin.localOnly && !d.environment.admin.allowFrom.length}
+        />
+        <EnvRow
+          label="Stream encryption key"
+          value={d.environment.streamsKeySet ? "Set" : "Derived from the session secret"}
+          hint={
+            d.environment.streamsKeySet
+              ? undefined
+              : "Set STREAMS_ENCRYPTION_KEY. Without it, rotating BETTER_AUTH_SECRET makes every stored stream credential unreadable."
+          }
+          warn={!d.environment.streamsKeySet}
+        />
+        <EnvRow label="Invitations expire after" value={`${d.environment.inviteDays} days`} />
+        <EnvRow label="App URL scheme" value={`${d.environment.appScheme}://`} mono />
+        {d.environment.admin.tokenFile && <EnvRow label="Management token file" value={d.environment.admin.tokenFile} mono />}
+      </Panel>
 
-          <TextRow
-            label="Support address"
-            hint="Shown in this instance's emails, so people know who to ask. Empty leaves it out."
-            value={d.settings.supportEmail.value}
-            source={d.settings.supportEmail.source}
-            placeholder="admin@example.com"
-            busy={save.isPending}
-            onSave={(v) => set({ supportEmail: v })}
-            onClear={() => set({ supportEmail: null })}
-          />
+      <Panel title="Changing what is above" icon={Server}>
+        <p className="field__hint">
+          Edit <code className="mono">.env</code> next to the <code className="mono">docker-compose.yml</code>, then{" "}
+          <code className="mono">kernctl service restart</code>. The ceilings that aren&rsquo;t listed here — upload sizes, per-space
+          limits, stream rates — are documented in <code className="mono">.env.example</code> and{" "}
+          <code className="mono">kernctl settings</code> prints the live values.
+        </p>
+      </Panel>
+    </>
+  );
+}
 
-          <TextRow
-            label="Notice on the sign-in screen"
-            hint="A line the Kern app shows people before they sign in. Empty for none."
-            value={d.settings.motd.value}
-            source={d.settings.motd.source}
-            placeholder="Maintenance on Sunday morning."
-            busy={save.isPending}
-            onSave={(v) => set({ motd: v })}
-            onClear={() => set({ motd: null })}
-          />
+/**
+ * How this window looks. Not the server's business, so none of it is sent:
+ * tokens.css answers to these four attributes already, because it is Kern's
+ * token file, so choosing here is the same choice Kern offers.
+ */
+function AppSettings() {
+  const appearance = useAppearance();
 
-          <div className="set-row">
-            <div className="set-row__text">
-              <span className="set-row__label">
-                Public share links and calendar feeds
-                <Source source={d.settings.sharesEnabled.source} />
-              </span>
-              <span className="set-row__hint">
-                Turning this off stops serving pages that are already published, as well as new ones.
-              </span>
-            </div>
-            <div className="set-row__control">
-              <Switch
-                checked={d.settings.sharesEnabled.value}
-                label="Allow publishing"
-                disabled={save.isPending}
-                onChange={(v) => set({ sharesEnabled: v })}
-              />
+  return (
+    <>
+      <Panel title="Appearance" icon={Palette} flush>
+        <div className="set-row">
+          <div className="set-row__text">
+            <span className="set-row__label">Theme</span>
+            <span className="set-row__hint">The whole app, charts included — they read the theme off the document rather than guess.</span>
+          </div>
+          <div className="set-row__control">
+            <div className="swatches">
+              {(["dark", "light"] as Theme[]).map((theme) => (
+                <button
+                  key={theme}
+                  type="button"
+                  className="swatch"
+                  data-active={appearance.theme === theme}
+                  aria-pressed={appearance.theme === theme}
+                  onClick={() => appearance.set("theme", theme)}
+                >
+                  <span className="swatch__face" data-theme={theme} aria-hidden>
+                    <span className="swatch__bar" />
+                    <span className="swatch__bar" />
+                  </span>
+                  <span className="swatch__label">{theme === "dark" ? "Dark" : "Light"}</span>
+                </button>
+              ))}
             </div>
           </div>
-        </Panel>
+        </div>
 
-        <Panel title="From .env — needs a restart" icon={Lock} flush>
-          <EnvRow label="Public address" value={d.environment.publicUrl} hint="What invite links and stream endpoints are built from." mono />
-          <EnvRow label="What people type into Kern" value={d.environment.apiUrl} mono />
-          {d.environment.linkUrl !== d.environment.publicUrl && <EnvRow label="Invite links" value={d.environment.linkUrl} mono />}
-          {d.environment.streamsUrl !== d.environment.publicUrl && <EnvRow label="Stream endpoints" value={d.environment.streamsUrl} mono />}
-          <EnvRow label="Listening on" value={`${d.environment.host}:${d.environment.port}`} mono />
-          <EnvRow
-            label="Outgoing mail"
-            value={d.environment.mail.configured ? `${d.environment.mail.host}:${d.environment.mail.port} as ${d.environment.mail.from}` : "Not configured"}
-            hint={
-              d.environment.mail.configured
-                ? undefined
-                : "Verification codes and invitations are printed to the server log instead of sent. Nobody else can finish signing up until this is set."
-            }
-            warn={!d.environment.mail.configured}
-          />
-          <EnvRow
-            label="Email into streams"
-            value={d.environment.inboundEmail.enabled ? d.environment.inboundEmail.domain || "on" : "Off"}
-          />
-          <EnvRow
-            label="Management API"
-            value={d.environment.admin.localOnly ? "This machine only" : `Also ${d.environment.admin.allowFrom.join(", ") || "nothing listed"}`}
-            hint={
-              d.environment.admin.localOnly
-                ? "Which is why Kern Platform connects over 127.0.0.1 or an SSH tunnel."
-                : "ADMIN_LOCAL_ONLY is off. Keep ADMIN_ALLOW_FROM as narrow as you can."
-            }
-            warn={!d.environment.admin.localOnly && !d.environment.admin.allowFrom.length}
-          />
-          <EnvRow
-            label="Stream encryption key"
-            value={d.environment.streamsKeySet ? "Set" : "Derived from the session secret"}
-            hint={
-              d.environment.streamsKeySet
-                ? undefined
-                : "Set STREAMS_ENCRYPTION_KEY. Without it, rotating BETTER_AUTH_SECRET makes every stored stream credential unreadable."
-            }
-            warn={!d.environment.streamsKeySet}
-          />
-          <EnvRow label="Invitations expire after" value={`${d.environment.inviteDays} days`} />
-          <EnvRow label="App URL scheme" value={`${d.environment.appScheme}://`} mono />
-          {d.environment.admin.tokenFile && <EnvRow label="Management token file" value={d.environment.admin.tokenFile} mono />}
-        </Panel>
+        <div className="set-row">
+          <div className="set-row__text">
+            <span className="set-row__label">Density</span>
+            <span className="set-row__hint">Row heights, control heights and padding. Compact fits a great many more log lines.</span>
+          </div>
+          <div className="set-row__control">
+            <Segmented
+              size="sm"
+              ariaLabel="Density"
+              value={appearance.density}
+              onChange={(v) => appearance.set("density", v as Density)}
+              options={[
+                { value: "compact", label: "Compact" },
+                { value: "comfortable", label: "Comfortable" },
+                { value: "relaxed", label: "Relaxed" },
+              ]}
+            />
+          </div>
+        </div>
 
-        <Panel title="Changing what is above" icon={Server}>
-          <p className="field__hint">
-            Edit <code className="mono">.env</code> next to the <code className="mono">docker-compose.yml</code>, then{" "}
-            <code className="mono">kernctl service restart</code>. The ceilings that aren&rsquo;t listed here — upload sizes, per-space
-            limits, stream rates — are documented in <code className="mono">.env.example</code> and{" "}
-            <code className="mono">kernctl settings</code> prints the live values.
-          </p>
-        </Panel>
-      </div>
-    </div>
+        <div className="set-row">
+          <div className="set-row__text">
+            <span className="set-row__label">Corners</span>
+            <span className="set-row__hint">How round panels, buttons and inputs are.</span>
+          </div>
+          <div className="set-row__control">
+            <Segmented
+              size="sm"
+              ariaLabel="Corners"
+              value={appearance.radius}
+              onChange={(v) => appearance.set("radius", v as Radius)}
+              options={[
+                { value: "sharp", label: "Sharp" },
+                { value: "default", label: "Default" },
+                { value: "round", label: "Round" },
+              ]}
+            />
+          </div>
+        </div>
+
+        <div className="set-row">
+          <div className="set-row__text">
+            <span className="set-row__label">Motion</span>
+            <span className="set-row__hint">
+              Off stops every transition and animation, charts included, and the live dot stops pulsing.
+            </span>
+          </div>
+          <div className="set-row__control">
+            <Segmented
+              size="sm"
+              ariaLabel="Motion"
+              value={appearance.motion}
+              onChange={(v) => appearance.set("motion", v as Motion)}
+              options={[
+                { value: "full", label: "Full" },
+                { value: "reduced", label: "Reduced" },
+                { value: "off", label: "Off" },
+              ]}
+            />
+          </div>
+        </div>
+      </Panel>
+
+      <Panel title="About these" icon={Monitor}>
+        <p className="field__hint">
+          These are this computer&rsquo;s, not the instance&rsquo;s: they are kept here and never sent, so they hold whichever server is
+          selected and whether or not one answers. Kern has the same four under <b>Settings → Appearance</b>, over the same tokens, if you
+          want the two apps to match.
+        </p>
+        <div className="row">
+          <Button
+            size="sm"
+            icon={RotateCcw}
+            onClick={() => {
+              appearance.reset();
+              toastOk("Back to the defaults.");
+            }}
+          >
+            Reset appearance
+          </Button>
+        </div>
+      </Panel>
+    </>
   );
 }
 

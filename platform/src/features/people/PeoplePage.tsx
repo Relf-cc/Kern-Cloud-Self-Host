@@ -11,14 +11,16 @@
 // any workspace they own with it, so it asks for the address to be typed and
 // refuses outright while other people are still using a workspace they own.
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Ban, MailCheck, Plus, Search, ShieldCheck, Trash2, UserRoundX, Users } from "lucide-react";
 import { api, describeError } from "@/lib/ipc";
-import { ago, count, day, sentence } from "@/lib/format";
+import { ago, count, day, sentence, shortDay } from "@/lib/format";
 import type { User } from "@/lib/types";
 import { Button, IconButton } from "@/components/ui/Button";
-import { Badge, Empty, Field, KeyValue, Loading, Panel, Segmented } from "@/components/ui/Controls";
+import { Badge, Empty, Field, KeyValue, Loading, Panel, Segmented, Stat } from "@/components/ui/Controls";
+import { Page, PageBody, PageHeader } from "@/components/layout/Page";
+import { TrendChart } from "@/components/charts";
 import { ConfirmDialog, Dialog } from "@/components/ui/Dialog";
 import { toastError, toastOk } from "@/stores/toast";
 import { useRouter } from "@/stores/router";
@@ -34,25 +36,34 @@ export function PeoplePage() {
   const users = useQuery({ queryKey: ["users", query, filter], queryFn: () => api.admin.users({ q: query, filter }) });
 
   return (
-    <div className="page">
-      <div className="page__inner">
-        <div className="toolbar">
-          <div className="input-wrap">
-            <Search strokeWidth={1.75} />
-            <input className="input" placeholder="Search by name or address" value={query} onChange={(e) => setQuery(e.target.value)} />
-          </div>
-          <Segmented
-            value={filter}
-            onChange={setFilter}
-            options={[
-              { value: "", label: "Everyone" },
-              { value: "unverified", label: "Unverified" },
-              { value: "held", label: "Suspended" },
-            ]}
-          />
-          <span className="spacer" />
-          {users.data && <span className="field__hint">{count(users.data.total)} accounts</span>}
-        </div>
+    <Page>
+      <PageHeader
+        icon={Users}
+        title="People"
+        sub={users.data ? `${count(users.data.total)} account${users.data.total === 1 ? "" : "s"}` : undefined}
+        actions={
+          <>
+            <div className="input-wrap" style={{ width: 240 }}>
+              <Search strokeWidth={1.75} />
+              <input className="input" placeholder="Search by name or address" value={query} onChange={(e) => setQuery(e.target.value)} />
+            </div>
+            <Segmented
+              size="sm"
+              ariaLabel="Which accounts"
+              value={filter}
+              onChange={setFilter}
+              options={[
+                { value: "", label: "Everyone" },
+                { value: "unverified", label: "Unverified" },
+                { value: "held", label: "Suspended" },
+              ]}
+            />
+          </>
+        }
+      />
+
+      <PageBody>
+        <SignUps />
 
         <div className="detail">
           <Panel flush>
@@ -74,7 +85,13 @@ export function PeoplePage() {
                 </thead>
                 <tbody>
                   {users.data.users.map((u) => (
-                    <tr key={u.id} data-clickable="true" onClick={() => open(u.id)} style={{ cursor: "default" }}>
+                    <tr
+                      key={u.id}
+                      data-clickable="true"
+                      data-selected={u.id === selection || undefined}
+                      onClick={() => open(u.id)}
+                      style={{ cursor: "default" }}
+                    >
                       <td>
                         <div className="col">
                           <span className="row" style={{ gap: 7 }}>
@@ -95,13 +112,59 @@ export function PeoplePage() {
             )}
           </Panel>
 
-          <div className="col" style={{ gap: 16 }}>
+          <div className="detail__side">
             {selection ? <UserDetail id={selection} onClose={() => open(null)} /> : <AllowList />}
             <Invites />
           </div>
         </div>
+      </PageBody>
+    </Page>
+  );
+}
+
+/**
+ * Who has an account, and the thirty days of sign-ups behind it.
+ *
+ * The figures come from /overview rather than from the list beside them: the
+ * list is searched, filtered and capped at 200, so counting it would quietly
+ * change the instance's totals every time somebody typed in the search box.
+ */
+function SignUps() {
+  const overview = useQuery({ queryKey: ["overview"], queryFn: api.admin.overview, staleTime: 30_000 });
+  const activity = useQuery({ queryKey: ["overview", "activity"], queryFn: () => api.admin.activity(30), staleTime: 60_000 });
+
+  const series = activity.data?.series ?? [];
+  const labels = useMemo(() => series.map((d) => shortDay(d.day)), [series]);
+  const values = useMemo(() => series.map((d) => d.signUps), [series]);
+  const joined = useMemo(() => values.reduce((a, b) => a + b, 0), [values]);
+  const tip = useMemo(
+    () => (index: number) => `${count(values[index] ?? 0)} sign-up${values[index] === 1 ? "" : "s"}`,
+    [values],
+  );
+
+  const a = overview.data?.accounts;
+
+  return (
+    <Panel title="Accounts" icon={Users}>
+      <div className="stat-row">
+        <Stat label="Total" value={a ? count(a.total) : "–"} sub={a && a.limit > 0 ? `limit ${count(a.limit)}` : undefined} />
+        <Stat label="Verified" value={a ? count(a.verified) : "–"} />
+        <Stat label="Not verified" value={a ? count(Math.max(0, a.total - a.verified)) : "–"} />
+        <Stat label="Suspended" value={a ? count(a.held) : "–"} />
+        <Stat label="New this week" value={a ? count(a.newThisWeek) : "–"} />
       </div>
-    </div>
+      {series.length > 0 && (
+        <div className="chart-stack__item">
+          <div className="chart-head">
+            <span className="chart-head__label">Sign-ups</span>
+            <span className="chart-head__value tabular">
+              {count(joined)} <span className="faint">in 30 days</span>
+            </span>
+          </div>
+          <TrendChart labels={labels} values={values} showDates tip={tip} ariaLabel={`Sign-ups per day: ${count(joined)} over the last 30 days.`} />
+        </div>
+      )}
+    </Panel>
   );
 }
 

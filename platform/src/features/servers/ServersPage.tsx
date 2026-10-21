@@ -11,12 +11,13 @@
 
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, KeyRound, LogOut, Plus, Trash2 } from "lucide-react";
+import { AlertTriangle, KeyRound, LogOut, Plus, Server as ServerIcon, Trash2 } from "lucide-react";
 import { api, describeError } from "@/lib/ipc";
 import { ago, day, host } from "@/lib/format";
 import type { MintedToken, Scope, Server } from "@/lib/types";
 import { Button, IconButton } from "@/components/ui/Button";
 import { Badge, Empty, Field, KeyValue, Loading, Panel } from "@/components/ui/Controls";
+import { Page, PageBody, PageHeader } from "@/components/layout/Page";
 import { ConfirmDialog, Dialog } from "@/components/ui/Dialog";
 import { toastError, toastOk } from "@/stores/toast";
 import { AddServer } from "./AddServer";
@@ -60,17 +61,20 @@ export function ServersPage({ current }: { current: Server }) {
   });
 
   return (
-    <div className="page">
-      <div className="page__inner">
-        <Panel
-          title="Servers"
-          flush
-          actions={
-            <Button size="sm" icon={Plus} onClick={() => setAdding(true)}>
-              Add
-            </Button>
-          }
-        >
+    <Page>
+      <PageHeader
+        icon={ServerIcon}
+        title="Servers"
+        sub={servers.data ? `${servers.data.length} known` : undefined}
+        actions={
+          <Button size="sm" icon={Plus} variant="primary" onClick={() => setAdding(true)}>
+            Add a server
+          </Button>
+        }
+      />
+
+      <PageBody>
+        <Panel title="Servers" flush>
           {servers.isLoading ? (
             <Loading what="Reading the list" />
           ) : (
@@ -196,7 +200,7 @@ export function ServersPage({ current }: { current: Server }) {
             </table>
           )}
         </Panel>
-      </div>
+      </PageBody>
 
       {adding && <AddServer onClose={() => setAdding(false)} />}
       {minting && <MintToken onClose={() => setMinting(false)} />}
@@ -217,7 +221,7 @@ export function ServersPage({ current }: { current: Server }) {
           }
         />
       )}
-    </div>
+    </Page>
   );
 }
 

@@ -11,12 +11,13 @@
 // let through.
 
 import { useQueryClient } from "@tanstack/react-query";
-import { KeyRound, PlugZap } from "lucide-react";
+import { KeyRound, PlugZap, Unplug } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Problem } from "@/components/ui/Controls";
+import { Page, PageBody, PageHeader } from "@/components/layout/Page";
 import { describeError, errorCode } from "@/lib/ipc";
 import type { Server } from "@/lib/types";
-import { useRouter, type Page } from "@/stores/router";
+import { useRouter, type Page as PageId } from "@/stores/router";
 import { ConsolePage } from "@/features/console/ConsolePage";
 import { HealthPage } from "@/features/health/HealthPage";
 import { KeysPage } from "@/features/keys/KeysPage";
@@ -28,23 +29,15 @@ import { SettingsPage } from "@/features/settings/SettingsPage";
 import { SpacesPage } from "@/features/spaces/SpacesPage";
 import { StreamsPage } from "@/features/streams/StreamsPage";
 
-export const PAGE_TITLES: Record<Page, string> = {
-  overview: "Overview",
-  health: "Health",
-  people: "People",
-  spaces: "Spaces",
-  streams: "Streams",
-  keys: "Workspace keys",
-  logs: "Logs",
-  console: "Console",
-  settings: "Server settings",
-  servers: "Servers",
-};
-
 /** Pages that still work with no connection, because they are how you fix it. */
-const OFFLINE_OK: Page[] = ["servers"];
+const OFFLINE_OK: PageId[] = ["servers"];
 
-export function Routes({ server, pingError, accountOnly = false }: { server: Server; pingError: unknown; accountOnly?: boolean }) {
+export function Routes({ server, pingError, accountOnly = false, readOnly = false }: {
+  server: Server;
+  pingError: unknown;
+  accountOnly?: boolean;
+  readOnly?: boolean;
+}) {
   const page = useRouter((s) => s.page);
   const go = useRouter((s) => s.go);
   const client = useQueryClient();
@@ -53,21 +46,24 @@ export function Routes({ server, pingError, accountOnly = false }: { server: Ser
     const code = errorCode(pingError);
     const needsToken = code === "auth";
     return (
-      <div className="page">
-        <Problem
-          title={needsToken ? `${server.name} didn't accept the token` : `Can't reach ${server.name}`}
-          detail={describeError(pingError)}
-        >
-          <div className="row" style={{ marginTop: 6 }}>
-            <Button icon={PlugZap} onClick={() => void client.invalidateQueries()}>
-              Try again
-            </Button>
-            <Button icon={KeyRound} variant={needsToken ? "primary" : "default"} onClick={() => go("servers")}>
-              {needsToken ? "Paste a new token" : "Server settings"}
-            </Button>
-          </div>
-        </Problem>
-      </div>
+      <Page>
+        <PageHeader icon={Unplug} title={needsToken ? "Token refused" : "Not connected"} sub={server.name} />
+        <PageBody narrow>
+          <Problem
+            title={needsToken ? `${server.name} didn't accept the token` : `Can't reach ${server.name}`}
+            detail={describeError(pingError)}
+          >
+            <div className="row" style={{ marginTop: 6 }}>
+              <Button icon={PlugZap} onClick={() => void client.invalidateQueries()}>
+                Try again
+              </Button>
+              <Button icon={KeyRound} variant={needsToken ? "primary" : "default"} onClick={() => go("servers")}>
+                {needsToken ? "Paste a new token" : "Server settings"}
+              </Button>
+            </div>
+          </Problem>
+        </PageBody>
+      </Page>
     );
   }
 
@@ -75,7 +71,7 @@ export function Routes({ server, pingError, accountOnly = false }: { server: Ser
     case "overview":
       return <OverviewPage />;
     case "health":
-      return <HealthPage />;
+      return <HealthPage readOnly={readOnly} />;
     case "people":
       return <PeoplePage />;
     case "spaces":

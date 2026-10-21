@@ -54,6 +54,13 @@ export function day(iso: string | null | undefined): string {
   return d.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
 }
 
+/** A "2026-10-21" day as "21 Oct", for an axis carrying thirty of them. */
+export function shortDay(iso: string): string {
+  const d = new Date(`${iso}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString(undefined, { day: "numeric", month: "short" });
+}
+
 /**
  * "4 minutes ago", "in 3 days". Used where the gap matters more than the
  * instant: when a token was last used, when an invitation runs out.

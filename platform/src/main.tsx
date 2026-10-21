@@ -12,7 +12,12 @@ import "./styles/base.css";
 import "./styles/components.css";
 import "./styles/layout.css";
 import "./styles/pages.css";
+import { initAppearance } from "./stores/appearance";
 import { App } from "./app/App";
+
+// index.html sets the theme before the first paint; this re-applies the whole
+// saved set from one place, so the two can't drift.
+initAppearance();
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

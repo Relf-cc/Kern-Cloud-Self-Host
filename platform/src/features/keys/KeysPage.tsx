@@ -28,7 +28,8 @@ import { Check, Copy, KeyRound, Plus, Trash2 } from "lucide-react";
 import { api, describeError } from "@/lib/ipc";
 import { ago, day } from "@/lib/format";
 import { Button, IconButton } from "@/components/ui/Button";
-import { Badge, Empty, Field, Loading, Panel, Stat, Switch } from "@/components/ui/Controls";
+import { Badge, Empty, Field, Loading, Panel, Progress, Stat, Switch } from "@/components/ui/Controls";
+import { Page, PageBody, PageHeader } from "@/components/layout/Page";
 import { Dialog } from "@/components/ui/Dialog";
 import { toastError, toastOk } from "@/stores/toast";
 import type { MintedWorkspaceKey, WorkspaceKey } from "@/lib/types";
@@ -116,20 +117,26 @@ export function KeysPage({ accountOnly = false }: { accountOnly?: boolean }) {
   const required = keys.data?.required ?? settings.data?.settings.workspaceKeys.value === "required";
 
   return (
-    <div className="page">
-      <div className="page__inner">
-        <Panel
-          title="Creating a workspace"
-          icon={KeyRound}
-          actions={
+    <Page>
+      <PageHeader
+        icon={KeyRound}
+        title="Workspace keys"
+        sub={required ? "a key is needed to create a workspace" : "anybody with an account may create one"}
+        actions={
+          <>
+            <span className="field__hint">{required ? "Required" : "Not required"}</span>
             <Switch
               checked={required}
               label={required ? "Stop requiring a key" : "Require a key"}
               disabled={gate.isPending || keys.isLoading}
               onChange={(on) => gate.mutate(on)}
             />
-          }
-        >
+          </>
+        }
+      />
+
+      <PageBody narrow>
+        <Panel title="Creating a workspace" icon={KeyRound}>
           <p className="field__hint">
             {required ? (
               <>
@@ -145,12 +152,22 @@ export function KeysPage({ accountOnly = false }: { accountOnly?: boolean }) {
             )}
           </p>
           {counts && (
-            <div className="stats">
-              <Stat label="Issued" value={counts.total} />
-              <Stat label="Usable" value={counts.usable} sub="not revoked" />
-              <Stat label="Taken" value={counts.redeemed} sub="claimed by an account" />
-              <Stat label="Revoked" value={counts.revoked} />
-            </div>
+            <>
+              <div className="stat-row">
+                <Stat label="Issued" value={counts.total} />
+                <Stat label="Usable" value={counts.usable} sub="not revoked" />
+                <Stat label="Taken" value={counts.redeemed} sub="claimed by an account" />
+                <Stat label="Revoked" value={counts.revoked} />
+              </div>
+              {counts.total > 0 && (
+                <>
+                  <Progress value={counts.redeemed} max={counts.total} label="Keys claimed, of keys issued" />
+                  <span className="field__hint">
+                    {counts.redeemed} of {counts.total} issued {counts.total === 1 ? "key has" : "keys have"} been claimed.
+                  </span>
+                </>
+              )}
+            </>
           )}
         </Panel>
 
@@ -273,7 +290,7 @@ export function KeysPage({ accountOnly = false }: { accountOnly?: boolean }) {
             </p>
           </Dialog>
         )}
-      </div>
-    </div>
+      </PageBody>
+    </Page>
   );
 }

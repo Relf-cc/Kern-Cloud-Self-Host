@@ -7,8 +7,10 @@
 // running; losing the interface to it should not look like losing the server.
 
 import { Component, type ErrorInfo, type ReactNode } from "react";
+import { CircleAlert } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Problem } from "@/components/ui/Controls";
+import { Page, PageBody, PageHeader } from "./Page";
 
 interface Props {
   children: ReactNode;
@@ -39,11 +41,14 @@ export class ErrorBoundary extends Component<Props, State> {
     const { error } = this.state;
     if (!error) return this.props.children;
     return (
-      <div className="page">
-        <Problem title="This page stopped working" detail={error.message}>
-          <Button onClick={() => this.setState({ error: null })}>Try again</Button>
-        </Problem>
-      </div>
+      <Page>
+        <PageHeader icon={CircleAlert} title="Something went wrong" />
+        <PageBody narrow>
+          <Problem title="This page stopped working" detail={error.message}>
+            <Button onClick={() => this.setState({ error: null })}>Try again</Button>
+          </Problem>
+        </PageBody>
+      </Page>
     );
   }
 }

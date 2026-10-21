@@ -11,7 +11,27 @@
         background: #111111;
         margin: 0;
       }
+      html[data-theme="light"],
+      html[data-theme="light"] body {
+        background: #f6f6f6;
+      }
     </style>
+    <script>
+      // Before the first paint, so a window remembered as light doesn't flash
+      // dark on its way there. The store this reads is stores/appearance.ts,
+      // which re-applies the whole set once React is up.
+      (function () {
+        try {
+          var saved = JSON.parse(localStorage.getItem("kern-platform:appearance") || "{}");
+          if (saved.theme === "light" || saved.theme === "dark") document.documentElement.dataset.theme = saved.theme;
+          if (saved.density && saved.density !== "comfortable") document.documentElement.dataset.density = saved.density;
+          if (saved.radius && saved.radius !== "default") document.documentElement.dataset.radius = saved.radius;
+          if (saved.motion && saved.motion !== "full") document.documentElement.dataset.motion = saved.motion;
+        } catch (e) {
+          /* the defaults in the markup stand */
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
