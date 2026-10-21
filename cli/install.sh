@@ -155,10 +155,10 @@ random_secret() {
 }
 
 random_password() {
-  # Hex, not base64, because this one is interpolated into DATABASE_URL
-  # (postgres://kern:<password>@db:5432/kern). A "/" in a base64 password
-  # ends the URL's authority early and leaves an invalid port, and the API
-  # dies at startup with ERR_INVALID_URL. Hex cannot. 24 bytes is 192 bits.
+  # Hex, not base64, because a native install writes this into DATABASE_URL
+  # (postgres://kern:<password>@127.0.0.1:5432/kern) and a "/" in a base64
+  # password would end that URL's authority early, leaving an invalid port
+  # the driver refuses. Hex cannot. 24 bytes is 192 bits.
   bytes="${1:-24}"
   if have openssl; then
     openssl rand -hex "$bytes" | tr -d '\n'

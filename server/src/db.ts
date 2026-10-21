@@ -8,7 +8,7 @@ import { config } from "./config.js";
 pg.types.setTypeParser(20, (v) => Number.parseInt(v, 10));
 
 export const pool = new pg.Pool({
-  connectionString: config.databaseUrl,
+  ...config.database,
   max: 20,
   idleTimeoutMillis: 30_000,
 });

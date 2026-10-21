@@ -59,6 +59,33 @@ function workspaceKeys(): WorkspaceKeys {
   return optional("WORKSPACE_KEYS", "off").toLowerCase() === "required" ? "required" : "off";
 }
 
+/**
+ * How to reach PostgreSQL: the connection string in DATABASE_URL when there is
+ * one, and otherwise the discrete PGHOST/PGPORT/PGUSER/PGPASSWORD/PGDATABASE
+ * variables that docker compose passes.
+ *
+ * Both, rather than a URL alone, because a password is not URL-safe text. A
+ * "/", "?" or "#" in one ends a connection URL's authority early and the
+ * driver throws out the whole string (ERR_INVALID_URL) while PostgreSQL itself
+ * stays healthy, which reads like a database problem and is not one. Compose
+ * has no way to percent-encode a variable it interpolates, so it hands the
+ * password over on its own and nothing needs escaping. Set DATABASE_URL (with
+ * the password percent-encoded, "/" as %2F) to point at a database elsewhere.
+ */
+function database() {
+  const url = optional("DATABASE_URL", "");
+  if (url) return { connectionString: url };
+  const host = optional("PGHOST", "");
+  if (!host) throw new Error("Missing DATABASE_URL, or PGHOST and PGPASSWORD, in the environment (see .env.example).");
+  return {
+    host,
+    port: int("PGPORT", 5432),
+    user: optional("PGUSER", "kern"),
+    password: optional("PGPASSWORD", ""),
+    database: optional("PGDATABASE", "kern"),
+  };
+}
+
 function load() {
   const port = int("PORT", 8787);
   const publicUrl = optional("PUBLIC_URL", `http://localhost:${port}`).replace(/\/+$/, "");
@@ -123,7 +150,8 @@ function load() {
     adminEmails: list("ADMIN_EMAILS").map((e) => e.toLowerCase()),
     /** Where people get the app when an invite link opens without it installed. */
     downloadUrl: optional("DOWNLOAD_URL", "https://github.com/kern-platform/kern/releases/latest"),
-    databaseUrl: required("DATABASE_URL"),
+    /** Connection settings for the one database; see database(). */
+    database: database(),
     authSecret: required("BETTER_AUTH_SECRET"),
     /**
      * Extra origins allowed to call the API with credentials. The desktop

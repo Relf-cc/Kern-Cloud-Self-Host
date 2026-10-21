@@ -37,7 +37,16 @@ services:
     restart: unless-stopped
     env_file: .env
     environment:
-      DATABASE_URL: postgres://kern:${POSTGRES_PASSWORD}@db:5432/kern
+      # Discrete variables, not a DATABASE_URL built out of them: a password
+      # containing "/", "?" or "#" makes a connection URL invalid, and compose
+      # cannot percent-encode what it interpolates. Passed this way the
+      # password needs no escaping, so POSTGRES_PASSWORD can be anything.
+      # DATABASE_URL in .env still wins, for a database outside this project.
+      PGHOST: db
+      PGPORT: "5432"
+      PGUSER: kern
+      PGPASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      PGDATABASE: kern
       PORT: "8787"
       ADMIN_TOKEN_FILE: /var/lib/kern/admin-token
     volumes:

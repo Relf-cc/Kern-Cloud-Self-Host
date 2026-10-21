@@ -144,12 +144,11 @@ BETTER_AUTH_SECRET=$(openssl rand -base64 48)
 STREAMS_ENCRYPTION_KEY=$(openssl rand -base64 32)
 ```
 
-**`POSTGRES_PASSWORD` must be hex, not base64.** `docker-compose.yml` builds
-`DATABASE_URL` as `postgres://kern:<password>@db:5432/kern`, and a `/` — which
-base64 produces about 40% of the time — ends the URL's authority early and
-leaves an invalid port. The API then dies at startup with `ERR_INVALID_URL`
-while PostgreSQL itself stays healthy, which reads like a database problem and
-is not one. The other two are never put in a URL, so base64 is fine for them.
+`POSTGRES_PASSWORD` can be anything: `docker-compose.yml` hands it to the API
+as `PGPASSWORD` rather than building a connection URL out of it, so a `/` or a
+`#` in it needs no escaping. PostgreSQL reads it once, when the data directory
+is first created — changing it in `.env` afterwards does not change the role's
+password, which takes `ALTER ROLE kern PASSWORD '…'` in the database itself.
 
 `PUBLIC_URL=https://api.relf.cc` and `STREAMS_URL=https://streams.relf.cc` are
 already set by `.env.example`; change them only if you are running a different
@@ -174,6 +173,11 @@ npm ci
 npm run build
 DATABASE_URL=postgres://… node dist/index.js
 ```
+
+`DATABASE_URL` is a URL, so percent-encode the password if it contains a `/`,
+`?` or `#` (`/` as `%2F`) — unencoded, the driver rejects the whole string with
+`ERR_INVALID_URL`. Or leave it unset and pass `PGHOST`, `PGUSER`, `PGPASSWORD`
+and `PGDATABASE` instead, which take the password as it is.
 
 Migrations run at startup, so there is no separate step. Put it behind a
 process manager that restarts it, and behind a reverse proxy with TLS.
@@ -952,9 +956,28 @@ refused you, not your token. Connect over loopback or a tunnel.
 
 **The API restarts forever and the log says `ERR_INVALID_URL`.** PostgreSQL is
 healthy, the API container is `Restarting`, and the stack trace ends in
-`pg-connection-string`. `POSTGRES_PASSWORD` contains a character that is not
-safe in a URL — almost always a `/` from `openssl rand -base64`. Give it a hex
-password instead, changing it in the database and in `.env` together:
+`pg-connection-string`. A password containing a `/`, `?` or `#` reached the
+driver as part of a connection URL — almost always a `/` from `openssl rand
+-base64`. Each of those three ends the URL's authority early, and the driver
+refuses the whole string rather than the password, which is why this reads like
+a database problem and is not one.
+
+Compose does not build a URL out of `POSTGRES_PASSWORD` any more — it passes
+`PGHOST`, `PGUSER`, `PGPASSWORD` and `PGDATABASE`, which need no escaping. So
+on a current checkout this means a `DATABASE_URL` is set in `.env`, where it
+wins over everything compose passes, with its password unencoded. Percent-encode
+it there (`/` as `%2F`), or drop the line and let compose do it:
+
+```sh
+grep -n '^DATABASE_URL=' .env     # if this prints, that line is what is in use
+docker compose up -d --build
+```
+
+On an older checkout, which did build the URL from `POSTGRES_PASSWORD`, pulling
+this one is the whole fix — the password itself is fine and does not need
+rotating. If you would rather rotate it anyway, change it in the database and in
+`.env` together: PostgreSQL keeps the password its data directory was
+initialised with, so changing `.env` alone does **not** work.
 
 ```sh
 NEW=$(openssl rand -hex 24)
@@ -962,10 +985,6 @@ docker compose exec db psql -U kern -d kern -c "ALTER USER kern WITH PASSWORD '$
 sed -i "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=$NEW|" .env
 docker compose up -d
 ```
-
-Changing `POSTGRES_PASSWORD` in `.env` alone does **not** work once the
-database exists: PostgreSQL keeps the password it was initialised with, so the
-two must be changed together or the volume removed and the stack started again.
 
 **Logs are empty after a restart.** `kernctl logs` reads a ring buffer in the
 server's memory (`ADMIN_LOG_LINES`), so a restart clears it. For history, read
