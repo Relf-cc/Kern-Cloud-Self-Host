@@ -404,6 +404,17 @@
   color: var(--text);
   font-weight: 550;
 }
+.welcome__aside {
+  margin-top: 12px;
+  font-size: var(--fs-xs);
+  color: var(--text-3);
+  line-height: 1.6;
+  text-align: center;
+}
+.welcome__aside b {
+  color: var(--text-2);
+  font-weight: 550;
+}
 .welcome__num {
   width: 18px;
   height: 18px;

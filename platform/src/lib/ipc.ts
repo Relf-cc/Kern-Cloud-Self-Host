@@ -51,6 +51,21 @@ export const api = {
       call<void>("server_note", { id, instanceName: instanceName ?? null, version: version ?? null }),
   },
 
+  /** Managing a server as yourself, rather than with a management token. */
+  account: {
+    signIn: (url: string, email: string, password: string) =>
+      call<{ server: T.Server; owner: T.Owner }>("account_sign_in", { url, email, password }),
+    me: () => call<T.Owner>("account_me"),
+    signOut: (id: string) => call<void>("account_sign_out", { id }),
+    hasSession: (id: string) => call<boolean>("account_has_session", { id }),
+    /** Workspace keys over that session. The only thing it can reach. */
+    keys: () => call<T.WorkspaceKeys>("owner_get", { path: "/workspace-keys" }),
+    mintKey: (note: string) => call<T.MintedWorkspaceKey>("owner_send", { method: "POST", path: "/workspace-keys", body: { note } }),
+    revokeKey: (id: string) => call<{ ok: boolean }>("owner_send", { method: "DELETE", path: `/workspace-keys/${encodeURIComponent(id)}` }),
+    setRequired: (required: boolean) =>
+      call<{ required: boolean }>("owner_send", { method: "PATCH", path: "/workspace-keys", body: { required } }),
+  },
+
   admin: {
     // ----- identity and figures
     ping: () => call<T.Ping>("admin_get", { path: "/ping" }),

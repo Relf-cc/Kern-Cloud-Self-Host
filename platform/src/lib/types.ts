@@ -24,6 +24,8 @@ export interface Server {
   version: string | null;
   lastConnectedAt: number | null;
   hasToken: boolean;
+  /** Whether an account session for it is saved: see Owner. */
+  hasSession: boolean;
   /** Set when the address works but isn't encrypted. */
   warning: string | null;
   selected: boolean;
@@ -258,6 +260,21 @@ export interface MintedToken {
   name: string;
   scope: Scope;
   expiresAt: string | null;
+}
+
+/**
+ * Who a saved account session belongs to, and to which instance.
+ *
+ * A server is reached one of two ways. A management token reaches everything
+ * but only over loopback or an SSH tunnel; an account session reaches
+ * workspace keys and nothing else, from anywhere. A profile can hold either,
+ * or both.
+ */
+export interface Owner {
+  email: string;
+  name: string | null;
+  instance: string;
+  workspaceKeys: "off" | "required";
 }
 
 // ------------------------------------------------------- workspace keys

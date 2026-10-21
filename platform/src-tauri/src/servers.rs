@@ -60,8 +60,12 @@ pub struct Server {
 pub struct ServerView {
     #[serde(flatten)]
     pub server: Server,
-    /// Whether a token for it is in the credential store.
+    /// Whether a management token for it is in the credential store.
     pub has_token: bool,
+    /// Whether an account session for it is. Filled in by the caller, which
+    /// can see account.rs; this module deliberately doesn't know about it.
+    #[serde(default)]
+    pub has_session: bool,
     /// Set when the address is allowed but not encrypted.
     pub warning: Option<String>,
     pub selected: bool,
@@ -276,6 +280,7 @@ pub fn list(config_dir: &PathBuf) -> AppResult<Vec<ServerView>> {
         .iter()
         .map(|s| ServerView {
             has_token: token_of(&s.id).is_some(),
+            has_session: false,
             warning: vet(&s.url).ok().and_then(|v| v.warning),
             selected: store.selected.as_deref() == Some(s.id.as_str()),
             server: s.clone(),

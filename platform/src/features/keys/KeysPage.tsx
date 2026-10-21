@@ -15,6 +15,12 @@
 // is minted, because only its hash is stored — so the dialog that shows it
 // has to be worth reading before it is dismissed. And revoking a key never
 // touches the workspaces already made with it: it only stops the next one.
+//
+// It is reachable two ways, and does the same four things either way. With a
+// management token it goes through /admin/*, which answers only the server's
+// own machine. Signed in as yourself it goes through /owner/*, which answers
+// from anywhere and holds nothing else. `accountOnly` picks the client; the
+// page below doesn't otherwise care which one it got.
 
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -33,14 +39,31 @@ function state(k: WorkspaceKey): { label: string; tone: "default" | "ok" | "warn
   return { label: "unused", tone: "default" };
 }
 
-export function KeysPage() {
+export function KeysPage({ accountOnly = false }: { accountOnly?: boolean }) {
   const client = useQueryClient();
+  // The same four operations, over whichever surface this server is reached by.
+  const keysApi = accountOnly
+    ? {
+        list: api.account.keys,
+        mint: api.account.mintKey,
+        revoke: api.account.revokeKey,
+        setRequired: async (on: boolean): Promise<void> => void (await api.account.setRequired(on)),
+      }
+    : {
+        list: api.admin.workspaceKeys,
+        mint: api.admin.mintWorkspaceKey,
+        revoke: api.admin.revokeWorkspaceKey,
+        setRequired: async (on: boolean): Promise<void> => void (await api.admin.setSettings({ workspaceKeys: on ? "required" : "off" })),
+      };
   const [minted, setMinted] = useState<MintedWorkspaceKey | null>(null);
   const [note, setNote] = useState("");
   const [copied, setCopied] = useState(false);
 
-  const keys = useQuery({ queryKey: ["workspace-keys"], queryFn: api.admin.workspaceKeys });
-  const settings = useQuery({ queryKey: ["settings"], queryFn: api.admin.settings });
+  const keys = useQuery({ queryKey: ["workspace-keys", accountOnly], queryFn: keysApi.list });
+  // The gate's current value comes with the key list on both surfaces; the
+  // settings endpoint is only consulted when there's a token to consult it
+  // with, so an account-only session doesn't ask for something it can't have.
+  const settings = useQuery({ queryKey: ["settings"], queryFn: api.admin.settings, enabled: !accountOnly });
 
   const refresh = () => {
     void client.invalidateQueries({ queryKey: ["workspace-keys"] });
@@ -48,7 +71,7 @@ export function KeysPage() {
   };
 
   const gate = useMutation({
-    mutationFn: (on: boolean) => api.admin.setSettings({ workspaceKeys: on ? "required" : "off" }),
+    mutationFn: (on: boolean) => keysApi.setRequired(on),
     onSuccess: (_r, on) => {
       toastOk(on ? "A key is now needed to create a workspace here." : "Anybody with an account may create a workspace again.");
       refresh();
@@ -57,7 +80,7 @@ export function KeysPage() {
   });
 
   const mint = useMutation({
-    mutationFn: () => api.admin.mintWorkspaceKey(note.trim()),
+    mutationFn: () => keysApi.mint(note.trim()),
     onSuccess: (key) => {
       setMinted(key);
       setCopied(false);
@@ -68,7 +91,7 @@ export function KeysPage() {
   });
 
   const revoke = useMutation({
-    mutationFn: (id: string) => api.admin.revokeWorkspaceKey(id),
+    mutationFn: (id: string) => keysApi.revoke(id),
     onSuccess: () => {
       toastOk("Revoked. Workspaces already created with it keep working.");
       refresh();
@@ -88,7 +111,9 @@ export function KeysPage() {
 
   const rows = keys.data?.keys ?? [];
   const counts = keys.data?.counts;
-  const required = settings.data?.settings.workspaceKeys.value === "required";
+  // /workspace-keys reports it on both surfaces, so it works either way;
+  // settings is the fallback for a token session that has it cached.
+  const required = keys.data?.required ?? settings.data?.settings.workspaceKeys.value === "required";
 
   return (
     <div className="page">
@@ -100,7 +125,7 @@ export function KeysPage() {
             <Switch
               checked={required}
               label={required ? "Stop requiring a key" : "Require a key"}
-              disabled={gate.isPending || settings.isLoading}
+              disabled={gate.isPending || keys.isLoading}
               onChange={(on) => gate.mutate(on)}
             />
           }

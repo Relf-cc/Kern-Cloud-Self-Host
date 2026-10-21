@@ -10,15 +10,25 @@
 // three steps are the whole path, and the third is the one that matters -
 // a management API that only answers its own machine needs a tunnel, and
 // saying so here saves a confusing failure later.
+//
+// There are two ways in, and they are not equal. A management token manages
+// everything but needs the server's own machine. Signing in with your own
+// account works from anywhere and reaches workspace keys only. Both are
+// offered here because which one somebody wants depends on where they are,
+// not on how much they are trusted.
 
 import { useState } from "react";
-import { Plus } from "lucide-react";
+import { LogIn, Plus } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/Button";
 import { BrandMark } from "@/app/BrandMark";
 import { AddServer } from "./AddServer";
+import { SignIn } from "./SignIn";
 
 export function Welcome() {
   const [adding, setAdding] = useState(false);
+  const [signingIn, setSigningIn] = useState(false);
+  const client = useQueryClient();
   return (
     <div className="welcome">
       <div className="welcome__card">
@@ -56,9 +66,20 @@ export function Welcome() {
           <Button variant="primary" icon={Plus} onClick={() => setAdding(true)}>
             Add a server
           </Button>
+          <Button icon={LogIn} onClick={() => setSigningIn(true)}>
+            Sign in with your account
+          </Button>
         </div>
+        <p className="welcome__aside">
+          Signing in manages <b>workspace keys</b> on a server whose administrator has listed your account, from anywhere. Everything
+          else needs the token above, on the server&rsquo;s own machine.
+        </p>
       </div>
       {adding && <AddServer onClose={() => setAdding(false)} />}
+      {signingIn && <SignIn onClose={() => setSigningIn(false)} onDone={() => {
+        setSigningIn(false);
+        void client.invalidateQueries({ queryKey: ["servers"] });
+      }} />}
     </div>
   );
 }

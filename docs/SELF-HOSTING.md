@@ -674,6 +674,13 @@ database cannot promote anybody, and a restored backup cannot quietly carry an
 administrator with it. Matching is exact and case-insensitive: no domains, no
 wildcards. Changes need a restart.
 
+In Kern Platform, that is the **Sign in with your account** button on the
+welcome screen: the address, your email and your password. A server reached
+that way shows the Keys page and nothing else, because that is all it will
+answer — the rest of the app needs a management token and the server's own
+machine. Signing out again is on the Servers page; it leaves the server in the
+list and any management token untouched.
+
 Every mint and revocation lands in the same audit trail as the management API
 (`kernctl audit`), attributed to the account rather than to a token.
 

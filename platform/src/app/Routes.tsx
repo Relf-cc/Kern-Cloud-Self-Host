@@ -44,7 +44,7 @@ export const PAGE_TITLES: Record<Page, string> = {
 /** Pages that still work with no connection, because they are how you fix it. */
 const OFFLINE_OK: Page[] = ["servers"];
 
-export function Routes({ server, pingError }: { server: Server; pingError: unknown }) {
+export function Routes({ server, pingError, accountOnly = false }: { server: Server; pingError: unknown; accountOnly?: boolean }) {
   const page = useRouter((s) => s.page);
   const go = useRouter((s) => s.go);
   const client = useQueryClient();
@@ -83,7 +83,7 @@ export function Routes({ server, pingError }: { server: Server; pingError: unkno
     case "streams":
       return <StreamsPage />;
     case "keys":
-      return <KeysPage />;
+      return <KeysPage accountOnly={accountOnly} />;
     case "logs":
       return <LogsPage />;
     case "console":

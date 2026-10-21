@@ -11,7 +11,7 @@
 
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, KeyRound, Plus, Trash2 } from "lucide-react";
+import { AlertTriangle, KeyRound, LogOut, Plus, Trash2 } from "lucide-react";
 import { api, describeError } from "@/lib/ipc";
 import { ago, day, host } from "@/lib/format";
 import type { MintedToken, Scope, Server } from "@/lib/types";
@@ -30,6 +30,15 @@ export function ServersPage({ current }: { current: Server }) {
 
   const servers = useQuery({ queryKey: ["servers"], queryFn: api.servers.list, staleTime: 0 });
   const tokens = useQuery({ queryKey: ["tokens"], queryFn: api.admin.tokens, retry: false });
+
+  const signOut = useMutation({
+    mutationFn: (id: string) => api.account.signOut(id),
+    onSuccess: () => {
+      toastOk("Signed out. The server stays in the list; its management token, if it has one, is untouched.");
+      void client.invalidateQueries({ queryKey: ["servers"] });
+    },
+    onError: (e) => toastError(describeError(e)),
+  });
 
   const remove = useMutation({
     mutationFn: (id: string) => api.servers.remove(id),
@@ -91,11 +100,26 @@ export function ServersPage({ current }: { current: Server }) {
                       </div>
                     </td>
                     <td className="mono">{host(s.url)}</td>
-                    <td>{s.hasToken ? <Badge tone="ok">held</Badge> : <Badge tone="warn">missing</Badge>}</td>
+                    <td>
+                      <div className="row" style={{ gap: 5 }}>
+                        {s.hasToken ? <Badge tone="ok">token</Badge> : null}
+                        {s.hasSession ? <Badge tone="ok">signed in</Badge> : null}
+                        {!s.hasToken && !s.hasSession ? <Badge tone="warn">missing</Badge> : null}
+                      </div>
+                    </td>
                     <td className="table__sub">{ago(s.lastConnectedAt ? new Date(s.lastConnectedAt).toISOString() : null)}</td>
                     <td className="right">
                       <div className="row" style={{ justifyContent: "flex-end" }}>
                         <IconButton icon={KeyRound} label="Replace the token" size="sm" onClick={() => setRetoken(s)} />
+                        {s.hasSession && (
+                          <IconButton
+                            icon={LogOut}
+                            label={`Sign out of ${s.instanceName ?? s.name}`}
+                            size="sm"
+                            disabled={signOut.isPending}
+                            onClick={() => signOut.mutate(s.id)}
+                          />
+                        )}
                         <IconButton icon={Trash2} label="Remove this server" size="sm" onClick={() => setRemoving(s)} />
                       </div>
                     </td>

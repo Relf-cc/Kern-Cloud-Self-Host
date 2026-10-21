@@ -17,7 +17,14 @@
 //! | `server_add`, `server_pair` | adding one, by hand or from `kernctl pair` |
 //! | `server_set_token`, `server_has_token` | the token, after a rotation |
 //! | `admin_get`, `admin_send` | everything else: one call per management endpoint |
+//! | `account_sign_in`, `account_me`, `account_sign_out` | managing a server as yourself |
+//! | `owner_get`, `owner_send` | workspace keys over that session |
+//!
+//! A server is reached one of two ways, and account.rs explains why they are
+//! not equal: a management token reaches everything but only over loopback,
+//! and an account session reaches workspace keys from anywhere.
 
+mod account;
 mod admin;
 mod error;
 mod servers;
@@ -38,7 +45,14 @@ fn config_dir(app: &AppHandle) -> AppResult<PathBuf> {
 
 #[tauri::command]
 fn servers_list(app: AppHandle) -> AppResult<Vec<servers::ServerView>> {
-    servers::list(&config_dir(&app)?)
+    let mut list = servers::list(&config_dir(&app)?)?;
+    // servers.rs holds the profiles and their management tokens; whether an
+    // account session exists is account.rs's business, so it is filled in here
+    // where both are visible.
+    for view in &mut list {
+        view.has_session = account::session_of(&view.server.id).is_some();
+    }
+    Ok(list)
 }
 
 /// Looks at an address without saving anything, so the "add a server" dialog
@@ -143,6 +157,59 @@ async fn admin_send(app: AppHandle, method: String, path: String, body: Option<V
 
 /// Notes what the server just told us about itself, so the picker reads
 /// properly next time even before a request is made.
+// ------------------------------------------------------------------- account
+//
+// Signing in as yourself, for a server you manage but cannot tunnel to. The
+// session reaches /owner/* only; see account.rs.
+
+#[tauri::command]
+async fn account_sign_in(app: AppHandle, url: String, email: String, password: String) -> AppResult<Value> {
+    let dir = config_dir(&app)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let (server, owner) = account::sign_in(&dir, &url, &email, &password)?;
+        Ok(serde_json::json!({ "server": server, "owner": owner }))
+    })
+    .await
+    .map_err(|e| AppError::Io(e.to_string()))?
+}
+
+/// Who the saved session belongs to. Also how the interface learns that one
+/// has expired, so it can offer to sign in again rather than showing nothing.
+#[tauri::command]
+async fn account_me(app: AppHandle) -> AppResult<account::Owner> {
+    let dir = config_dir(&app)?;
+    tauri::async_runtime::spawn_blocking(move || account::me(&dir))
+        .await
+        .map_err(|e| AppError::Io(e.to_string()))?
+}
+
+#[tauri::command]
+fn account_sign_out(app: AppHandle, id: String) -> AppResult<()> {
+    let _ = config_dir(&app)?;
+    account::sign_out(&id)
+}
+
+#[tauri::command]
+fn account_has_session(id: String) -> bool {
+    account::session_of(&id).is_some()
+}
+
+#[tauri::command]
+async fn owner_get(app: AppHandle, path: String) -> AppResult<Value> {
+    let dir = config_dir(&app)?;
+    tauri::async_runtime::spawn_blocking(move || account::request(&dir, "GET", &path, None))
+        .await
+        .map_err(|e| AppError::Io(e.to_string()))?
+}
+
+#[tauri::command]
+async fn owner_send(app: AppHandle, method: String, path: String, body: Option<Value>) -> AppResult<Value> {
+    let dir = config_dir(&app)?;
+    tauri::async_runtime::spawn_blocking(move || account::request(&dir, &method, &path, body.as_ref()))
+        .await
+        .map_err(|e| AppError::Io(e.to_string()))?
+}
+
 #[tauri::command]
 fn server_note(app: AppHandle, id: String, instance_name: Option<String>, version: Option<String>) -> AppResult<()> {
     servers::note_connection(&config_dir(&app)?, &id, instance_name, version)
@@ -179,6 +246,13 @@ pub fn run() {
             // management
             admin_get,
             admin_send,
+            // managing a server as yourself
+            account_sign_in,
+            account_me,
+            account_sign_out,
+            account_has_session,
+            owner_get,
+            owner_send,
         ])
         .run(tauri::generate_context!())
         .expect("Kern Platform couldn't start");

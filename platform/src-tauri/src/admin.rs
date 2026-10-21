@@ -26,7 +26,7 @@ pub struct Reply {
     pub body: Value,
 }
 
-fn agent(timeout: u64) -> ureq::Agent {
+pub(crate) fn agent(timeout: u64) -> ureq::Agent {
     ureq::Agent::config_builder()
         .timeout_global(Some(Duration::from_secs(timeout)))
         .http_status_as_error(false)
@@ -96,7 +96,7 @@ fn send(url: &str, token: &str, method: &str, body: Option<&Value>, timeout: u64
     Ok(Reply { status, body })
 }
 
-fn unreachable_message(url: &str, detail: &str) -> AppError {
+pub(crate) fn unreachable_message(url: &str, detail: &str) -> AppError {
     let host = url::Url::parse(url).ok().and_then(|u| u.host_str().map(String::from)).unwrap_or_else(|| "the server".into());
     AppError::Network(format!(
         "Couldn't reach {host}.\n\nIf it's on another machine, its management API answers only its own loopback by default - forward the port first:\n  ssh -L 8787:127.0.0.1:8787 you@{host}\n\n({detail})"
