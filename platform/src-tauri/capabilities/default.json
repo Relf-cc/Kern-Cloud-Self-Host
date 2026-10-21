@@ -1,0 +1,13 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "What the one window may do. Kern Platform makes no network requests from the webview: everything goes through a command, so the management token stays in the back end.",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-start-dragging",
+    "dialog:allow-message",
+    "dialog:allow-confirm",
+    "opener:allow-open-url"
+  ]
+}

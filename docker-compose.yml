@@ -1,0 +1,49 @@
+# Kern, self-hosted: PostgreSQL and the API.
+#
+#   cp .env.example .env        # fill in the secrets it asks for
+#   docker compose up -d --build
+#   docker compose logs api     # the bootstrap management token, once
+#
+# The API is published on 127.0.0.1 only. That is the whole shape of this
+# deployment: Kern Platform and kernctl manage it over loopback, and if you
+# want people on other machines to sync to it, you put a reverse proxy with
+# TLS in front (see docs/SELF-HOSTING.md) rather than opening this port.
+name: kern
+
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: kern
+      POSTGRES_USER: kern
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kern -d kern"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      args:
+        VERSION: ${KERN_VERSION:-dev}
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://kern:${POSTGRES_PASSWORD}@db:5432/kern
+      PORT: "8787"
+      ADMIN_TOKEN_FILE: /var/lib/kern/admin-token
+    volumes:
+      # The bootstrap management token, so it survives a rebuild and kernctl
+      # on the host can read it.
+      - ./data/kern:/var/lib/kern
+    ports:
+      # Loopback only. Change this to a reverse proxy, not to 0.0.0.0.
+      - "127.0.0.1:8787:8787"
+    depends_on:
+      db:
+        condition: service_healthy

@@ -1,0 +1,265 @@
+/**
+ * @Author Christian Relf
+ * @Date 2026-10-21
+ */
+
+/* ------------------------------------------------------------------
+   Design tokens, the same ones Kern uses, so the two apps are plainly
+   the same family. Greyscale by default; every colour, size and motion
+   value used by components comes from here.
+   ------------------------------------------------------------------ */
+
+:root {
+  color-scheme: dark;
+
+  /* Surfaces */
+  --bg: #111111;
+  --bg-sunken: #0d0d0d;
+  --surface: #161616;
+  --surface-2: #1c1c1c;
+  --surface-3: #222222;
+  --hover: rgba(255, 255, 255, 0.055);
+  --hover-strong: rgba(255, 255, 255, 0.085);
+  --active: rgba(255, 255, 255, 0.11);
+  --selection: rgba(255, 255, 255, 0.09);
+  --selection-strong: rgba(255, 255, 255, 0.14);
+
+  /* Lines */
+  --border: #282828;
+  --border-subtle: #1f1f1f;
+  --border-strong: #3a3a3a;
+  --divider: rgba(255, 255, 255, 0.06);
+
+  /* Text */
+  --text: #ededed;
+  --text-2: #a9a9a9;
+  --text-3: #808080;
+  --text-4: #5e5e5e;
+  --text-inverse: #111111;
+
+  /* Accent: greyscale unless personalised */
+  --accent: #e6e6e6;
+  --accent-fg: #111111;
+  --accent-soft: rgba(255, 255, 255, 0.08);
+  --accent-line: rgba(255, 255, 255, 0.55);
+  --focus-ring: #d8d8d8;
+
+  /* Restrained semantic tones (used sparingly, never as the only signal) */
+  --danger: #e0716f;
+  --danger-soft: rgba(224, 113, 111, 0.12);
+  --warning: #cfae74;
+  --update: #5b9cf5;
+  --update-soft: rgba(91, 156, 245, 0.14);
+
+  /* Muted series hues: commit-graph lanes, language bars */
+  --hue-0: #7f9fd6;
+  --hue-1: #c49a6c;
+  --hue-2: #82b48f;
+  --hue-3: #b98fc9;
+  --hue-4: #6fb2b0;
+  --hue-5: #d08a8a;
+  --hue-6: #b5b06a;
+  --hue-7: #8f93d6;
+
+  /* Code highlighting (file viewer); muted to sit in the greyscale UI */
+  --code-foreground: #d4d4d4;
+  --code-token-comment: #6f757c;
+  --code-token-keyword: #c49ad6;
+  --code-token-string: #a8c79a;
+  --code-token-string-expression: #a8c79a;
+  --code-token-constant: #d6a77a;
+  --code-token-function: #8fb3e0;
+  --code-token-parameter: #d9c48f;
+  --code-token-punctuation: #9a9a9a;
+  --code-token-link: #8fb3e0;
+  --code-token-inserted: #8bb795;
+  --code-token-deleted: #e0716f;
+  --code-token-changed: #cfae74;
+
+  /* Elevation */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.38);
+  --shadow-pop: 0 10px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px var(--border);
+  --backdrop: rgba(0, 0, 0, 0.42);
+
+  /* Typography */
+  --font-sans: "Inter Variable", "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, "Cascadia Code", Consolas, monospace;
+  --fs: 1;
+  --fs-2xs: calc(10.5px * var(--fs));
+  --fs-xs: calc(11.5px * var(--fs));
+  --fs-sm: calc(12.5px * var(--fs));
+  --fs-md: calc(13.5px * var(--fs));
+  --fs-lg: calc(15px * var(--fs));
+  --fs-xl: calc(18px * var(--fs));
+  --fs-2xl: calc(21px * var(--fs));
+  --lh: 1.45;
+
+  /* Radius (default preset) */
+  --r-xs: 4px;
+  --r-sm: 6px;
+  --r-md: 8px;
+  --r-lg: 10px;
+  --r-xl: 12px;
+
+  /* Density (comfortable) */
+  --row-h: 32px;
+  --control-h: 30px;
+  --control-h-sm: 26px;
+  --pad-x: 12px;
+  --pad-y: 8px;
+  --gap: 8px;
+  --gap-lg: 16px;
+  --widget-pad: 12px;
+  --nav-item-h: 30px;
+  --card-pad: 10px;
+  --icon: 16px;
+  --icon-sm: 14px;
+
+  /* Motion */
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --t-hover: 110ms;
+  --t-press: 130ms;
+  --t-menu: 150ms;
+  --t-panel: 190ms;
+  --t-layout: 230ms;
+  --enter-scale: 0.97;
+  --enter-shift: 4px;
+
+
+  --sidebar-w: 236px;
+  --inspector-w: 380px;
+}
+
+/* ---------------------------------------------------------- light */
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f6f6f6;
+  --bg-sunken: #efefef;
+  --surface: #ffffff;
+  --surface-2: #fafafa;
+  --surface-3: #f2f2f2;
+  --hover: rgba(0, 0, 0, 0.045);
+  --hover-strong: rgba(0, 0, 0, 0.07);
+  --active: rgba(0, 0, 0, 0.09);
+  --selection: rgba(0, 0, 0, 0.065);
+  --selection-strong: rgba(0, 0, 0, 0.1);
+  --border: #e3e3e3;
+  --border-subtle: #ececec;
+  --border-strong: #cfcfcf;
+  --divider: rgba(0, 0, 0, 0.07);
+  --text: #171717;
+  --text-2: #555555;
+  --text-3: #7a7a7a;
+  --text-4: #a6a6a6;
+  --text-inverse: #ffffff;
+  --accent: #1c1c1c;
+  --accent-fg: #ffffff;
+  --accent-soft: rgba(0, 0, 0, 0.06);
+  --accent-line: rgba(0, 0, 0, 0.5);
+  --focus-ring: #2a2a2a;
+  --danger: #c4413d;
+  --danger-soft: rgba(196, 65, 61, 0.09);
+  --warning: #9a7430;
+  --update: #2563d9;
+  --update-soft: rgba(37, 99, 217, 0.1);
+  --hue-0: #4a6fae;
+  --hue-1: #9a6c38;
+  --hue-2: #43815a;
+  --hue-3: #8a5aa0;
+  --hue-4: #2f7e7b;
+  --hue-5: #a95656;
+  --hue-6: #807b2e;
+  --hue-7: #5a5fb0;
+  --code-foreground: #262626;
+  --code-token-comment: #8a8f95;
+  --code-token-keyword: #8a4fa8;
+  --code-token-string: #3f7d4f;
+  --code-token-string-expression: #3f7d4f;
+  --code-token-constant: #a35f22;
+  --code-token-function: #2f62a8;
+  --code-token-parameter: #866a1c;
+  --code-token-punctuation: #666666;
+  --code-token-link: #2f62a8;
+  --code-token-inserted: #3f7d4f;
+  --code-token-deleted: #c4413d;
+  --code-token-changed: #9a7430;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.08);
+  --shadow-pop: 0 10px 30px rgba(0, 0, 0, 0.12), 0 0 0 1px var(--border);
+  --backdrop: rgba(0, 0, 0, 0.18);
+}
+
+/* ---------------------------------------------------------- accents
+   Muted, low-chroma hues; applied only to accent surfaces. */
+:root[data-accent="blue"] { --accent: #8aa9dc; --accent-fg: #0f1520; --accent-soft: rgba(138, 169, 220, 0.14); --accent-line: rgba(138, 169, 220, 0.7); }
+:root[data-accent="violet"] { --accent: #a597dd; --accent-fg: #15121f; --accent-soft: rgba(165, 151, 221, 0.14); --accent-line: rgba(165, 151, 221, 0.7); }
+:root[data-accent="green"] { --accent: #8bb795; --accent-fg: #0f1711; --accent-soft: rgba(139, 183, 149, 0.14); --accent-line: rgba(139, 183, 149, 0.7); }
+:root[data-accent="amber"] { --accent: #d2ad73; --accent-fg: #1a140b; --accent-soft: rgba(210, 173, 115, 0.14); --accent-line: rgba(210, 173, 115, 0.7); }
+:root[data-accent="rose"] { --accent: #cf929d; --accent-fg: #1d1013; --accent-soft: rgba(207, 146, 157, 0.14); --accent-line: rgba(207, 146, 157, 0.7); }
+:root[data-accent="teal"] { --accent: #7bb5ae; --accent-fg: #0d1716; --accent-soft: rgba(123, 181, 174, 0.14); --accent-line: rgba(123, 181, 174, 0.7); }
+:root[data-theme="light"][data-accent="blue"] { --accent: #3f6fb5; --accent-fg: #fff; --accent-soft: rgba(63, 111, 181, 0.1); }
+:root[data-theme="light"][data-accent="violet"] { --accent: #6a58b8; --accent-fg: #fff; --accent-soft: rgba(106, 88, 184, 0.1); }
+:root[data-theme="light"][data-accent="green"] { --accent: #3f7d4f; --accent-fg: #fff; --accent-soft: rgba(63, 125, 79, 0.1); }
+:root[data-theme="light"][data-accent="amber"] { --accent: #95682a; --accent-fg: #fff; --accent-soft: rgba(149, 104, 42, 0.1); }
+:root[data-theme="light"][data-accent="rose"] { --accent: #a04a5b; --accent-fg: #fff; --accent-soft: rgba(160, 74, 91, 0.1); }
+:root[data-theme="light"][data-accent="teal"] { --accent: #2f7a72; --accent-fg: #fff; --accent-soft: rgba(47, 122, 114, 0.1); }
+
+/* ---------------------------------------------------------- density */
+:root[data-density="compact"] {
+  --row-h: 28px;
+  --control-h: 26px;
+  --control-h-sm: 22px;
+  --pad-x: 10px;
+  --pad-y: 6px;
+  --gap: 6px;
+  --gap-lg: 12px;
+  --widget-pad: 10px;
+  --nav-item-h: 27px;
+  --card-pad: 8px;
+}
+:root[data-density="relaxed"] {
+  --row-h: 37px;
+  --control-h: 34px;
+  --control-h-sm: 29px;
+  --pad-x: 14px;
+  --pad-y: 10px;
+  --gap: 10px;
+  --gap-lg: 20px;
+  --widget-pad: 16px;
+  --nav-item-h: 34px;
+  --card-pad: 12px;
+}
+
+/* ---------------------------------------------------------- radius */
+:root[data-radius="sharp"] { --r-xs: 2px; --r-sm: 3px; --r-md: 4px; --r-lg: 5px; --r-xl: 6px; }
+:root[data-radius="round"] { --r-xs: 5px; --r-sm: 7px; --r-md: 9px; --r-lg: 12px; --r-xl: 14px; }
+
+/* ---------------------------------------------------------- fonts */
+:root[data-font="geist"] { --font-sans: "Geist Variable", "Geist", system-ui, "Segoe UI", sans-serif; }
+:root[data-font="system"] { --font-sans: system-ui, -apple-system, "Segoe UI Variable Text", "Segoe UI", sans-serif; }
+
+/* ---------------------------------------------------------- motion */
+:root[data-motion="reduced"] {
+  --t-menu: 90ms;
+  --t-panel: 120ms;
+  --t-layout: 140ms;
+  --enter-scale: 1;
+  --enter-shift: 0px;
+}
+:root[data-motion="off"] {
+  --t-hover: 0ms;
+  --t-press: 0ms;
+  --t-menu: 0ms;
+  --t-panel: 0ms;
+  --t-layout: 0ms;
+  --enter-scale: 1;
+  --enter-shift: 0px;
+}
+:root[data-motion="off"] *,
+:root[data-motion="off"] *::before,
+:root[data-motion="off"] *::after {
+  animation-duration: 0ms !important;
+  transition-duration: 0ms !important;
+}

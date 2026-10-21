@@ -1,0 +1,43 @@
+[package]
+name = "kern-platform"
+version = "1.0.0"
+description = "Kern Platform - manage a self-hosted Kern server"
+edition = "2021"
+rust-version = "1.80"
+license = "Apache-2.0"
+
+[lib]
+name = "kern_platform_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+tauri-plugin-opener = "2"
+tauri-plugin-single-instance = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+# The management API client. rustls so there is no OpenSSL to find on Linux.
+ureq = { version = "3", default-features = false, features = ["rustls"] }
+url = "2"
+base64 = "0.22"
+
+# Management tokens live in the operating system's credential store, never in
+# a file this app writes and never in the webview.
+[target.'cfg(windows)'.dependencies]
+keyring = { version = "3.6", features = ["windows-native"] }
+[target.'cfg(target_os = "macos")'.dependencies]
+keyring = { version = "3.6", features = ["apple-native"] }
+[target.'cfg(target_os = "linux")'.dependencies]
+keyring = { version = "3.6", features = ["linux-native-sync-persistent", "crypto-rust"] }
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true

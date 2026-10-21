@@ -1,0 +1,8 @@
+node_modules
+dist
+.env
+*.log
+data/
+# Tauri build output (Kern Platform)
+platform/src-tauri/target
+platform/src-tauri/gen/schemas

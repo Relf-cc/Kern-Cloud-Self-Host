@@ -1,0 +1,20 @@
+<!--
+  Kern Platform's mark: Kern's K, standing on a base.
+
+  The tile, the greys and the K are Kern's own, so the two apps read as a set
+  on a dock or a taskbar. The K is set a little smaller and a bar runs under
+  it - the platform it manages. Flat fills, no filters: this is drawn at 32px
+  more often than at 1024.
+
+  scripts/icons.py renders this to the PNG, ICO and ICNS files Tauri bundles.
+-->
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <path d="M760 64H264C153.543 64 64 153.543 64 264V760C64 870.457 153.543 960 264 960H760C870.457 960 960 870.457 960 760V264C960 153.543 870.457 64 760 64Z" fill="#161616"/>
+  <path d="M759.5 68.5H264.5C156.252 68.5 68.5 156.252 68.5 264.5V759.5C68.5 867.748 156.252 955.5 264.5 955.5H759.5C867.748 955.5 955.5 867.748 955.5 759.5V264.5C955.5 156.252 867.748 68.5 759.5 68.5Z" stroke="#353535" stroke-width="9"/>
+  <g transform="translate(0,-36) translate(500,512) scale(0.84) translate(-500,-512)">
+    <path d="M380 496.5L660 764" stroke="#8F8F8F" stroke-width="95" stroke-linecap="round"/>
+    <path d="M396 495L684 248" stroke="#EFEFEF" stroke-width="95" stroke-linecap="round"/>
+    <path d="M424 244.148C424 215.348 399.6 192 369.5 192C339.4 192 315 215.348 315 244.148V512V779.852C315 808.652 339.4 832 369.5 832C399.6 832 424 808.652 424 779.852V244.148Z" fill="#EFEFEF"/>
+  </g>
+  <rect x="300" y="838" width="424" height="58" rx="29" fill="#8F8F8F"/>
+</svg>

@@ -1,0 +1,1231 @@
+#!/bin/sh
+# kernctl - manage a self-hosted Kern server from a terminal.
+#
+# Everything Kern Platform can do, this can do: both speak the same management
+# API (/kern/v1/admin/*), so a headless server is not a lesser citizen. On the
+# server's own machine it needs no setup at all - it finds the management token
+# where the server wrote it.
+#
+# POSIX sh and curl, nothing else required. Formatted tables use python3 when
+# it is present; `--json` always works and needs neither, which is what you
+# want in a script or a monitoring check.
+#
+# Configuration, in the order it is consulted:
+#
+#   --url / --token              on the command line
+#   KERN_URL / KERN_ADMIN_TOKEN  in the environment
+#   ~/.config/kernctl/config     written by `kernctl use`
+#   /etc/kernctl/config          system-wide, written by the installer
+#   the token file               ADMIN_TOKEN_FILE, or /var/lib/kern/admin-token
+#   http://127.0.0.1:8787        the default address
+#
+# Exit codes: 0 fine, 1 refused by the server, 2 called wrongly, 3 could not
+# reach the server, 4 health found a failure.
+
+set -eu
+
+VERSION="1.0.0"
+PROG="$(basename "$0")"
+
+DEFAULT_URL="http://127.0.0.1:8787"
+USER_CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/kernctl/config"
+SYSTEM_CONFIG="/etc/kernctl/config"
+DEFAULT_TOKEN_FILE="/var/lib/kern/admin-token"
+
+URL=""
+TOKEN=""
+JSON=0
+YES=0
+QUIET=0
+API=""
+ADMIN=""
+BODY=""
+CFG_URL=""
+CFG_TOKEN=""
+CFG_TOKEN_FILE=""
+CFG_HOME=""
+CFG_SERVICE=""
+
+# --------------------------------------------------------------- foundations
+
+if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
+  C_DIM='\033[2m'; C_B='\033[1m'; C_OK='\033[32m'; C_WARN='\033[33m'; C_ERR='\033[31m'; C_OFF='\033[0m'
+else
+  C_DIM=''; C_B=''; C_OK=''; C_WARN=''; C_ERR=''; C_OFF=''
+fi
+
+say() { [ "$QUIET" = 1 ] || printf '%b\n' "$*"; }
+warn() { printf '%b\n' "${C_WARN}$*${C_OFF}" >&2; }
+die() { printf '%b\n' "${C_ERR}$1${C_OFF}" >&2; exit "${2:-1}"; }
+usage_error() {
+  printf '%b\n' "${C_ERR}$*${C_OFF}" >&2
+  printf '%s\n' "Try: $PROG help" >&2
+  exit 2
+}
+need() { command -v "$1" >/dev/null 2>&1 || die "$PROG needs $1, which isn't installed." 2; }
+has_python() { command -v python3 >/dev/null 2>&1; }
+
+# ------------------------------------------------------------- configuration
+
+read_config_file() {
+  [ -r "$1" ] || return 0
+  # Only KERN_* assignments are read, and they are never executed: a stray
+  # command in a config file must not run just because kernctl started.
+  while IFS='=' read -r key value; do
+    case "$key" in
+      KERN_URL) [ -z "$CFG_URL" ] && CFG_URL="$value" ;;
+      KERN_ADMIN_TOKEN) [ -z "$CFG_TOKEN" ] && CFG_TOKEN="$value" ;;
+      KERN_TOKEN_FILE) [ -z "$CFG_TOKEN_FILE" ] && CFG_TOKEN_FILE="$value" ;;
+      KERN_HOME) [ -z "$CFG_HOME" ] && CFG_HOME="$value" ;;
+      KERN_SERVICE) [ -z "$CFG_SERVICE" ] && CFG_SERVICE="$value" ;;
+    esac
+  done <<CONFIG
+$(sed -n 's/^[[:space:]]*\(KERN_[A-Z_]*\)[[:space:]]*=[[:space:]]*"\{0,1\}\([^"]*\)"\{0,1\}[[:space:]]*$/\1=\2/p' "$1")
+CONFIG
+}
+
+load_config() {
+  read_config_file "$USER_CONFIG"
+  read_config_file "$SYSTEM_CONFIG"
+}
+
+resolve() {
+  load_config
+  [ -z "$URL" ] && URL="${KERN_URL:-}"
+  [ -z "$URL" ] && URL="$CFG_URL"
+  [ -z "$URL" ] && URL="$DEFAULT_URL"
+  URL="${URL%/}"
+  # Accept either the origin or the full API base, so both paste in cleanly.
+  case "$URL" in
+    */kern/v1) API="$URL" ;;
+    *) API="$URL/kern/v1" ;;
+  esac
+  ADMIN="$API/admin"
+
+  [ -z "$TOKEN" ] && TOKEN="${KERN_ADMIN_TOKEN:-}"
+  [ -z "$TOKEN" ] && TOKEN="$CFG_TOKEN"
+  if [ -z "$TOKEN" ]; then
+    for f in "$CFG_TOKEN_FILE" "${ADMIN_TOKEN_FILE:-}" "$DEFAULT_TOKEN_FILE" "${CFG_HOME:-/opt/kern}/data/kern/admin-token"; do
+      [ -n "$f" ] || continue
+      [ -r "$f" ] || continue
+      TOKEN="$(tr -d ' \t\n\r' < "$f")"
+      [ -n "$TOKEN" ] && break
+    done
+  fi
+}
+
+# ---------------------------------------------------------------- the request
+
+no_token() {
+  die "No management token.
+
+On the server:        sudo $PROG token new \"$(hostname 2>/dev/null || echo cli)\"
+Or pass one:          $PROG --token kern_… status
+Or point at a file:   KERN_TOKEN_FILE=/path/to/token in $USER_CONFIG
+
+The server writes a first token to ${ADMIN_TOKEN_FILE:-$DEFAULT_TOKEN_FILE} on
+first start, and prints it if it cannot write there." 2
+}
+
+# api METHOD PATH [BODY] -> response body on stdout
+api() {
+  need curl
+  [ -n "$TOKEN" ] || no_token
+  method="$1"
+  path="$2"
+  payload="${3:-}"
+
+  tmp="$(mktemp)"
+  errfile="$(mktemp)"
+  if [ -n "$payload" ]; then
+    code="$(curl -sS -o "$tmp" -w '%{http_code}' -X "$method" \
+      -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -H 'Accept: application/json' \
+      --max-time 60 --data "$payload" "$ADMIN$path" 2>"$errfile")" || code="000"
+  else
+    code="$(curl -sS -o "$tmp" -w '%{http_code}' -X "$method" \
+      -H "Authorization: Bearer $TOKEN" -H 'Accept: application/json' \
+      --max-time 60 "$ADMIN$path" 2>"$errfile")" || code="000"
+  fi
+  response="$(cat "$tmp")"
+  curl_error="$(cat "$errfile")"
+  rm -f "$tmp" "$errfile"
+
+  if [ "$code" = "000" ]; then
+    die "Can't reach the server at $ADMIN
+${curl_error}
+
+Is it running?   $PROG service status
+Is it loopback?  ssh -L 8787:127.0.0.1:8787 ${USER:-you}@server" 3
+  fi
+  if [ "$code" -ge 400 ]; then
+    message="$(json_str "$response" message)"
+    [ -z "$message" ] && message="The server answered $code."
+    die "$message" 1
+  fi
+  printf '%s' "$response"
+}
+
+# Pulls one top-level string out of a JSON object without a parser. Enough for
+# error messages and single fields; anything structured goes through python3.
+json_str() {
+  printf '%s' "$1" | sed -n 's/.*"'"$2"'"[[:space:]]*:[[:space:]]*"\([^"\\]*\(\\.[^"\\]*\)*\)".*/\1/p' | head -1
+}
+
+json_num() {
+  printf '%s' "$1" | sed -n 's/.*"'"$2"'"[[:space:]]*:[[:space:]]*\(-\{0,1\}[0-9][0-9.]*\).*/\1/p' | head -1
+}
+
+json_quote() {
+  printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/^/"/' -e 's/$/"/'
+}
+
+urlencode() {
+  printf '%s' "$1" | sed -e 's/%/%25/g' -e 's/ /%20/g' -e 's/+/%2B/g' -e 's/&/%26/g' -e 's/#/%23/g' -e 's/?/%3F/g' -e 's|/|%2F|g'
+}
+
+# Runs a python3 program with $BODY on its stdin. Falls back to printing the
+# JSON, so no command *needs* python3.
+#   -I: isolated, so nothing is imported from the working directory.
+render() {
+  if [ "$JSON" = 1 ] || ! has_python; then
+    [ "$JSON" = 1 ] || warn "Install python3 for formatted output, or use --json."
+    printf '%s\n' "$BODY"
+    return 0
+  fi
+  printf '%s' "$BODY" | python3 -I -c "$1"
+}
+
+confirm() {
+  [ "$YES" = 1 ] && return 0
+  [ -t 0 ] || die "Refusing to do that without a terminal to ask at. Pass --yes if you mean it." 2
+  printf '%b' "${C_WARN}$1${C_OFF}\nType ${C_B}yes${C_OFF} to continue: "
+  read -r answer
+  [ "$answer" = "yes" ] || die "Left alone." 2
+}
+
+# Shared python helpers, prepended to every program that formats a table.
+PY_HELPERS=$(cat <<'PYEOF'
+import json, sys
+D = json.load(sys.stdin)
+DIM, BOLD, OK, WARN, ERR, OFF = "\033[2m", "\033[1m", "\033[32m", "\033[33m", "\033[31m", "\033[0m"
+def size(n):
+    n = float(n)
+    for u in ("B", "KB", "MB", "GB", "TB"):
+        if n < 1024:
+            return ("%d %s" % (n, u)) if u == "B" else ("%.1f %s" % (n, u))
+        n /= 1024
+    return "%.1f PB" % n
+def when(s, length=16):
+    return s[:length].replace("T", " ") if s else "-"
+def row(label, value, width=14):
+    print("  " + label.ljust(width) + " " + str(value))
+PYEOF
+)
+
+py() {
+  printf '%s\n%s' "$PY_HELPERS" "$1"
+}
+
+# ---------------------------------------------------------- service handling
+#
+# An instance is one of two shapes: a docker compose project, or a systemd
+# unit. The installer records which one in KERN_SERVICE; otherwise we look.
+
+SERVICE=""
+HOME_DIR=""
+
+detect_service() {
+  SERVICE="$CFG_SERVICE"
+  HOME_DIR="${CFG_HOME:-/opt/kern}"
+  if [ -z "$SERVICE" ]; then
+    if [ -f "$HOME_DIR/docker-compose.yml" ]; then
+      SERVICE="compose"
+    elif command -v systemctl >/dev/null 2>&1 && systemctl list-unit-files 2>/dev/null | grep -q '^kern-server\.service'; then
+      SERVICE="systemd"
+    else
+      SERVICE="unknown"
+    fi
+  fi
+}
+
+compose() {
+  if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
+    ( cd "$HOME_DIR" && docker compose "$@" )
+  elif command -v docker-compose >/dev/null 2>&1; then
+    ( cd "$HOME_DIR" && docker-compose "$@" )
+  else
+    die "Neither \`docker compose\` nor \`docker-compose\` is installed." 2
+  fi
+}
+
+service_cmd() {
+  detect_service
+  action="$1"
+  lines="${2:-200}"
+  case "$SERVICE" in
+    compose)
+      case "$action" in
+        status) compose ps ;;
+        start) compose up -d ;;
+        stop) compose stop ;;
+        restart) compose restart api ;;
+        logs) compose logs --tail "$lines" api ;;
+        upgrade) compose up -d --build && say "${C_OK}Rebuilt and restarted.${C_OFF}" ;;
+      esac
+      ;;
+    systemd)
+      case "$action" in
+        status) systemctl status --no-pager kern-server ;;
+        start) systemctl start kern-server ;;
+        stop) systemctl stop kern-server ;;
+        restart) systemctl restart kern-server ;;
+        logs) journalctl -u kern-server -n "$lines" --no-pager ;;
+        upgrade) die "Upgrade a systemd install by replacing the files, then: systemctl restart kern-server" 2 ;;
+      esac
+      ;;
+    *)
+      die "Can't tell how this server is run. Put KERN_HOME and KERN_SERVICE (compose or systemd) in $USER_CONFIG." 2
+      ;;
+  esac
+}
+
+# --------------------------------------------------------------------- status
+
+cmd_status() {
+  BODY="$(api GET /overview)"
+  render "$(py '
+i, a, s, c = D["instance"], D["accounts"], D["spaces"], D["collaboration"]
+st, sh, so, rt = D["streams"], D["shares"], D["storage"], D["realtime"]
+def duration(sec):
+    sec = int(sec)
+    d, sec = divmod(sec, 86400)
+    h, sec = divmod(sec, 3600)
+    m = sec // 60
+    out = ""
+    if d: out += "%dd " % d
+    if h or d: out += "%dh " % h
+    return out + "%dm" % m
+print()
+print("  " + BOLD + i["name"] + OFF)
+print("  " + DIM + i["apiUrl"] + OFF)
+print()
+row("Version", "%s on node %s (%s)" % (i["version"], i["nodeVersion"], i["platform"]))
+row("Uptime", duration(i["uptimeSeconds"]))
+row("Registration", i["registration"])
+accounts = "%d (%d verified" % (a["total"], a["verified"])
+if a["held"]: accounts += ", %d suspended" % a["held"]
+if a["newThisWeek"]: accounts += ", %d new this week" % a["newThisWeek"]
+accounts += ")"
+if a["limit"]: accounts += "   limit %d" % a["limit"]
+row("Accounts", accounts)
+spaces = "%d personal, %d workspaces" % (s["personal"], s["workspaces"])
+if s["deleted"]: spaces += ", %d deleted" % s["deleted"]
+row("Spaces", spaces)
+row("Records", "{:,} synced, {:,} tombstones".format(s["records"] - s["tombstones"], s["tombstones"]))
+row("Sharing", "%d memberships, %d open invitations" % (c["members"], c["openInvites"]))
+streams = "%d of %d enabled, %d deliveries today" % (st["enabled"], st["total"], st["deliveriesToday"])
+if st["failuresToday"]: streams += ERR + ", %d failed" % st["failuresToday"] + OFF
+row("Streams", streams)
+row("Publishing", "%d links, %d calendar feeds" % (sh["links"], sh["calendarFeeds"]) if sh["enabled"] else "turned off")
+row("Storage", "%s database, %s in %d images" % (size(so["databaseBytes"]), size(so["assetBytes"]), so["assetCount"]))
+row("Connected", "%d client(s) in %d space(s)" % (rt.get("connections", 0), rt.get("rooms", 0)))
+row("Email", D["mail"]["from"] if D["mail"]["configured"] else WARN + "not configured - codes go to the log" + OFF)
+print()
+')"
+}
+
+# --------------------------------------------------------------------- health
+
+show_fixes() {
+  render "$(py '
+for r in D["results"]:
+    if r.get("failed"):
+        print("  " + ERR + "x" + OFF + " " + r["id"] + ": " + r["failed"])
+    elif r["done"]:
+        print("  " + OK + "+" + OFF + " " + r["id"] + ": " + r["done"])
+')"
+}
+
+show_health() {
+  render "$(py '
+marks = {"ok": OK + " ok " + OFF, "warn": WARN + "warn" + OFF, "fail": ERR + "FAIL" + OFF, "skip": DIM + "skip" + OFF}
+group = None
+for c in D["checks"]:
+    if c["group"] != group:
+        group = c["group"]
+        print()
+        print("  " + DIM + group + OFF)
+    print("  [" + marks[c["status"]] + "] " + c["title"])
+    if c["status"] in ("warn", "fail"):
+        print("         " + c["detail"])
+        if c.get("fix"):
+            print("         " + DIM + "repair:" + OFF + " kernctl health --fix=" + c["id"])
+    elif c.get("facts"):
+        print("         " + DIM + "  ".join("%s %s" % (k, v) for k, v in c["facts"].items())[:110] + OFF)
+print()
+failing = [c for c in D["checks"] if c["status"] == "fail"]
+looking = [c for c in D["checks"] if c["status"] == "warn"]
+if failing:
+    print("  " + ERR + "%d failing" % len(failing) + OFF + (", %d to look at" % len(looking) if looking else ""))
+elif looking:
+    print("  " + WARN + "%d to look at" % len(looking) + OFF)
+else:
+    print("  " + OK + "All good." + OFF)
+print()
+')"
+}
+
+cmd_health() {
+  fix_id=""
+  fix_all=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --fix) fix_all=1 ;;
+      --fix=*) fix_id="${1#--fix=}" ;;
+      *) usage_error "Unexpected argument: $1" ;;
+    esac
+    shift
+  done
+
+  if [ -n "$fix_id" ]; then
+    BODY="$(api POST /health/fix "{\"id\":$(json_quote "$fix_id")}")"
+    show_fixes
+    return 0
+  fi
+  if [ "$fix_all" = 1 ]; then
+    BODY="$(api POST /health/fix '{"all":true}')"
+    show_fixes
+    say ""
+  fi
+
+  BODY="$(api GET /health)"
+  status="$(json_str "$BODY" status)"
+  show_health
+  [ "$status" = "fail" ] && exit 4
+  return 0
+}
+
+cmd_heal() {
+  say "${C_B}Repairing what can be repaired${C_OFF}"
+  BODY="$(api POST /health/fix '{"all":true}')"
+  show_fixes
+  [ "$JSON" = 1 ] && return 0
+  say ""
+  say "${C_B}Checking again${C_OFF}"
+  BODY="$(api GET /health)"
+  status="$(json_str "$BODY" status)"
+  show_health
+  [ "$status" = "fail" ] && exit 4
+  return 0
+}
+
+# --------------------------------------------------------------------- doctor
+#
+# The one command that looks at this machine rather than the server. Run it
+# when the server won't start, or before reporting a problem.
+
+cmd_doctor() {
+  detect_service
+  say ""
+  say "${C_B}This machine${C_OFF}"
+  say "  host           $(hostname 2>/dev/null || echo unknown)"
+  say "  kernctl        $VERSION"
+  for tool in curl python3 docker pg_dump psql systemctl; do
+    path="$(command -v "$tool" 2>/dev/null || true)"
+    if [ -n "$path" ]; then
+      say "  $(printf '%-14s' "$tool") ${C_OK}$path${C_OFF}"
+    else
+      say "  $(printf '%-14s' "$tool") ${C_DIM}not installed${C_OFF}"
+    fi
+  done
+  if command -v df >/dev/null 2>&1; then
+    disk="$(df -h "${CFG_HOME:-/}" 2>/dev/null | awk 'NR==2 {print $4" free of "$2" on "$6}')"
+    [ -n "$disk" ] && say "  disk           $disk"
+  fi
+
+  say ""
+  say "${C_B}This install${C_OFF}"
+  say "  shape          $SERVICE"
+  say "  directory      ${CFG_HOME:-${C_DIM}not recorded${C_OFF}}"
+  say "  api            $ADMIN"
+  if [ -n "$TOKEN" ]; then
+    say "  token          ${C_OK}found${C_OFF} ${C_DIM}($(printf '%s' "$TOKEN" | cut -c1-21)…)${C_OFF}"
+  else
+    say "  token          ${C_ERR}not found${C_OFF} ${C_DIM}(looked in ${ADMIN_TOKEN_FILE:-$DEFAULT_TOKEN_FILE})${C_OFF}"
+  fi
+  for f in "$USER_CONFIG" "$SYSTEM_CONFIG"; do
+    [ -r "$f" ] && say "  config         $f"
+  done
+
+  say ""
+  say "${C_B}Reaching the server${C_OFF}"
+  need curl
+  code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 "$API/health" 2>/dev/null || echo 000)"
+  if [ "$code" = "200" ]; then
+    say "  health         ${C_OK}200${C_OFF}  $API/health"
+    inst="$(curl -sS --max-time 10 "$API/instance" 2>/dev/null || true)"
+    if [ -n "$inst" ]; then
+      say "  instance       $(json_str "$inst" name)"
+      say "  protocol       $(json_num "$inst" protocol)"
+      say "  registration   $(json_str "$inst" registration)"
+    fi
+  else
+    say "  health         ${C_ERR}$code${C_OFF}  $API/health"
+    say ""
+    say "  The server isn't answering. Things to try:"
+    say "    $PROG service status"
+    say "    $PROG service logs"
+    say ""
+    return 0
+  fi
+
+  if [ -n "$TOKEN" ]; then
+    say ""
+    say "${C_B}Server health${C_OFF}"
+    BODY="$(api GET /health)"
+    show_health
+  fi
+}
+
+# ---------------------------------------------------------------------- users
+
+user_id_for() {
+  case "$1" in
+    *@*)
+      found="$(api GET "/users?q=$(urlencode "$1")&limit=5")"
+      id="$(printf '%s' "$found" | sed -n 's/.*"id"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)"
+      [ -n "$id" ] || die "No account here with the address $1." 1
+      printf '%s' "$id"
+      ;;
+    *) printf '%s' "$1" ;;
+  esac
+}
+
+cmd_users() {
+  sub="${1:-list}"
+  [ $# -gt 0 ] && shift
+  case "$sub" in
+    list)
+      q=""
+      filter=""
+      while [ $# -gt 0 ]; do
+        case "$1" in
+          -q|--search) q="${2:?-q needs something to search for}"; shift ;;
+          --held|--suspended) filter="held" ;;
+          --unverified) filter="unverified" ;;
+          *) usage_error "Unexpected argument: $1" ;;
+        esac
+        shift
+      done
+      BODY="$(api GET "/users?q=$(urlencode "$q")&filter=$filter&limit=200")"
+      render "$(py '
+us = D["users"]
+if not us:
+    print("  No accounts match.")
+    raise SystemExit
+w = min(max(len(u["email"]) for u in us), 40)
+print()
+print("  " + "EMAIL".ljust(w) + "  SPACES  SESSIONS  STATE")
+for u in us:
+    state = "suspended" if u["held"] else ("unverified" if not u["emailVerified"] else "")
+    colour = ERR if u["held"] else (WARN if not u["emailVerified"] else "")
+    print("  " + u["email"][:w].ljust(w) + "  %6d  %8d  %s%s%s" % (u["spaces"], u["activeSessions"], colour, state, OFF if colour else ""))
+print()
+print("  %d of %d accounts" % (len(us), D["total"]))
+print()
+')"
+      ;;
+    show)
+      [ $# -ge 1 ] || usage_error "Which account? $PROG users show <email|id>"
+      BODY="$(api GET "/users/$(user_id_for "$1")")"
+      render "$(py '
+u = D["user"]
+print()
+print("  " + BOLD + (u["name"] or "(no name)") + OFF + "  <" + u["email"] + ">")
+print("  " + DIM + u["id"] + OFF)
+print()
+row("Joined", when(u["createdAt"], 10))
+row("Email", "verified" if u["emailVerified"] else WARN + "not verified" + OFF)
+row("State", (ERR + "suspended" + OFF + ": " + (u["holdReason"] or "no reason given")) if u["held"] else "active")
+row("Sessions", "%d active" % u["activeSessions"])
+if D["spaces"]:
+    print()
+    print("  " + DIM + "spaces" + OFF)
+    for s in D["spaces"]:
+        print("    %-7s %-10s %s" % (s["role"], s["kind"], s["name"]))
+        print("    " + DIM + "%d records, %d member(s)   %s" % (s["records"], s["members"], s["id"]) + OFF)
+if D["sessions"]:
+    print()
+    print("  " + DIM + "sessions" + OFF)
+    for s in D["sessions"]:
+        print("    %s  %-16s %s" % (when(s["createdAt"]), s["ip"] or "-", (s["client"] or "")[:46]))
+print()
+')"
+      ;;
+    hold|suspend)
+      [ $# -ge 1 ] || usage_error "Which account? $PROG users hold <email> [reason]"
+      who="$1"; shift
+      id="$(user_id_for "$who")"
+      BODY="$(api POST "/users/$id/hold" "{\"reason\":$(json_quote "${*:-}")}")"
+      [ "$JSON" = 1 ] && { printf '%s\n' "$BODY"; return 0; }
+      say "${C_OK}Suspended $who.${C_OFF} Their sessions are gone and their sockets closed; their data is untouched."
+      ;;
+    release|unsuspend)
+      [ $# -ge 1 ] || usage_error "Which account? $PROG users release <email>"
+      BODY="$(api DELETE "/users/$(user_id_for "$1")/hold")"
+      [ "$JSON" = 1 ] && { printf '%s\n' "$BODY"; return 0; }
+      say "${C_OK}$1 can sign in again.${C_OFF}"
+      ;;
+    verify)
+      [ $# -ge 1 ] || usage_error "Which account? $PROG users verify <email>"
+      BODY="$(api POST "/users/$(user_id_for "$1")/verify" '{}')"
+      [ "$JSON" = 1 ] && { printf '%s\n' "$BODY"; return 0; }
+      say "${C_OK}$1 is marked verified.${C_OFF} ${C_DIM}Useful on an instance with no SMTP.${C_OFF}"
+      ;;
+    revoke-sessions)
+      [ $# -ge 1 ] || usage_error "Which account? $PROG users revoke-sessions <email>"
+      BODY="$(api POST "/users/$(user_id_for "$1")/sessions/revoke" '{}')"
+      [ "$JSON" = 1 ] && { printf '%s\n' "$BODY"; return 0; }
+      say "${C_OK}Signed $1 out everywhere${C_OFF} ($(json_num "$BODY" revoked) session(s))."
+      ;;
+    delete)
+      [ $# -ge 1 ] || usage_error "Which account? $PROG users delete <email> [--with-workspaces]"
+      who="$1"; shift
+      extra=""
+      [ "${1:-}" = "--with-workspaces" ] && extra="?withWorkspaces=true"
+      id="$(user_id_for "$who")"
+      confirm "This deletes $who, their personal space and every workspace they own. It cannot be undone."
+      BODY="$(api DELETE "/users/$id$extra" "{\"confirm\":$(json_quote "$who")}")"
+      [ "$JSON" = 1 ] && { printf '%s\n' "$BODY"; return 0; }
+      say "${C_OK}Deleted $who${C_OFF} and $(json_num "$BODY" spacesRemoved) space(s)."
+      ;;
+    *) usage_error "Unknown: users $sub" ;;
+  esac
+}
+
+# ----------------------------------------------------------------- allow list
+
+cmd_allow() {
+  sub="${1:-list}"
+  [ $# -gt 0 ] && shift
+  case "$sub" in
+    list)
+      BODY="$(api GET /allow)"
+      render "$(py '
+print()
+row("Registration", D["registration"])
+print()
+if not D["allowed"]:
+    print("  Nobody is pre-authorised.")
+    if D["registration"] == "invite":
+        print("  " + DIM + "In invite mode, people need a workspace invitation, or an entry here." + OFF)
+else:
+    for a in D["allowed"]:
+        used = ("used " + when(a["usedAt"], 10)) if a["usedAt"] else "unused"
+        print("  %-34s %-12s %s" % (a["email"], used, a["note"]))
+print()
+')"
+      ;;
+    add)
+      [ $# -ge 1 ] || usage_error "Which address? $PROG allow add <email> [note]"
+      email="$1"; shift
+      BODY="$(api POST /allow "{\"email\":$(json_quote "$email"),\"note\":$(json_quote "${*:-}")}")"
+      [ "$JSON" = 1 ] && { printf '%s\n' "$BODY"; return 0; }
+      say "${C_OK}$email may now sign up.${C_OFF}"
+      ;;
+    remove|rm)
+      [ $# -ge 1 ] || usage_error "Which address? $PROG allow remove <email>"
+      BODY="$(api DELETE "/allow/$(urlencode "$1")")"
+      [ "$JSON" = 1 ] && { printf '%s\n' "$BODY"; return 0; }
+      say "${C_OK}Removed $1.${C_OFF} ${C_DIM}An account they already made is unaffected.${C_OFF}"
+      ;;
+    *) usage_error "Unknown: allow $sub" ;;
+  esac
+}
+
+# --------------------------------------------------------------------- spaces
+
+cmd_spaces() {
+  sub="${1:-list}"
+  [ $# -gt 0 ] && shift
+  case "$sub" in
+    list)
+      q=""; kind=""; deleted=""
+      while [ $# -gt 0 ]; do
+        case "$1" in
+          -q|--search) q="${2:?-q needs something to search for}"; shift ;;
+          --personal) kind="personal" ;;
+          --workspaces) kind="workspace" ;;
+          --deleted) deleted="true" ;;
+          *) usage_error "Unexpected argument: $1" ;;
+        esac
+        shift
+      done
+      BODY="$(api GET "/spaces?q=$(urlencode "$q")&kind=$kind&deleted=$deleted&limit=200")"
+      render "$(py '
+ss = D["spaces"]
+if not ss:
+    print("  No spaces match.")
+    raise SystemExit
+w = min(max(len(s["name"]) for s in ss), 30)
+print()
+print("  " + "NAME".ljust(w + 1) + " KIND       MEMBERS  RECORDS  IMAGES  OWNER")
+for s in ss:
+    mark = "*" if s["deletedAt"] else " "
+    print("  " + s["name"][:w].ljust(w) + mark + " %-10s %7d  %7d  %6s  %s"
+          % (s["kind"], s["members"], s["records"], size(s["assetBytes"]), s["owner"]["email"]))
+    print("  " + DIM + " " * (w + 1) + " " + s["id"] + OFF)
+print()
+print("  %d space(s)" % len(ss) + ("    * deleted" if any(s["deletedAt"] for s in ss) else ""))
+print()
+')"
+      ;;
+    show)
+      [ $# -ge 1 ] || usage_error "Which space? $PROG spaces show <id>"
+      BODY="$(api GET "/spaces/$1")"
+      render "$(py '
+s = D["space"]
+print()
+print("  " + BOLD + s["name"] + OFF + "  " + DIM + "(" + s["kind"] + ")" + OFF)
+print("  " + DIM + s["id"] + OFF)
+print()
+row("Created", when(s["createdAt"], 10))
+row("Change head", s["head"])
+if s["deletedAt"]:
+    row("Deleted", when(s["deletedAt"], 10))
+print()
+print("  " + DIM + "members" + OFF)
+for m in D["members"]:
+    print("    %-7s %s" % (m["role"], m["email"]))
+if D["tables"]:
+    print()
+    print("  " + DIM + "records by table" + OFF)
+    for t in D["tables"]:
+        extra = "  (+%d deleted)" % t["tombstones"] if t["tombstones"] else ""
+        print("    %-24s %7d%s" % (t["table"], t["records"], extra))
+print()
+')"
+      ;;
+    delete)
+      [ $# -ge 1 ] || usage_error "Which space? $PROG spaces delete <id> [--purge]"
+      id="$1"; shift
+      purge=""
+      [ "${1:-}" = "--purge" ] && purge="?purge=true"
+      detail="$(api GET "/spaces/$id")"
+      name="$(json_str "$detail" name)"
+      if [ -n "$purge" ]; then
+        confirm "This permanently removes \"$name\" and everything in it."
+      else
+        confirm "This marks \"$name\" deleted for everyone in it."
+      fi
+      BODY="$(api DELETE "/spaces/$id$purge" "{\"confirm\":$(json_quote "$name")}")"
+      [ "$JSON" = 1 ] && { printf '%s\n' "$BODY"; return 0; }
+      if [ -n "$purge" ]; then
+        say "${C_OK}\"$name\" is gone.${C_OFF}"
+      else
+        say "${C_OK}\"$name\" is marked deleted.${C_OFF} ${C_DIM}Purge it with --purge, or let \`$PROG heal\` clear it after 30 days.${C_OFF}"
+      fi
+      ;;
+    *) usage_error "Unknown: spaces $sub" ;;
+  esac
+}
+
+# -------------------------------------------------------------------- invites
+
+cmd_invites() {
+  sub="${1:-list}"
+  [ $# -gt 0 ] && shift
+  case "$sub" in
+    list)
+      BODY="$(api GET "/invites?limit=200")"
+      render "$(py '
+iv = D["invites"]
+if not iv:
+    print("  No invitations.")
+    raise SystemExit
+print()
+for i in iv:
+    print("  %-9s %-30s %-7s %s" % (i["status"], i["email"], i["role"], i["workspace"]["name"]))
+    print("  " + DIM + "          %s   expires %s" % (i["id"], when(i["expiresAt"], 10)) + OFF)
+print()
+')"
+      ;;
+    revoke)
+      [ $# -ge 1 ] || usage_error "Which invitation? $PROG invites revoke <id>"
+      BODY="$(api DELETE "/invites/$1")"
+      [ "$JSON" = 1 ] && { printf '%s\n' "$BODY"; return 0; }
+      say "${C_OK}Revoked.${C_OFF}"
+      ;;
+    *) usage_error "Unknown: invites $sub" ;;
+  esac
+}
+
+# -------------------------------------------------------------------- streams
+
+cmd_streams() {
+  sub="${1:-list}"
+  [ $# -gt 0 ] && shift
+  case "$sub" in
+    list)
+      BODY="$(api GET "/streams?limit=200")"
+      render "$(py '
+ss = D["streams"]
+if not ss:
+    print("  No streams.")
+    raise SystemExit
+print()
+for s in ss:
+    state = (OK + "on " + OFF) if s["enabled"] else (DIM + "off" + OFF)
+    failed = (ERR + "   %d failed this week" % s["failuresThisWeek"] + OFF) if s["failuresThisWeek"] else ""
+    print("  [%s] %-28s %7d total   last %s%s"
+          % (state, s["name"][:28], s["deliveries"], when(s["lastDeliveryAt"]), failed))
+    print("  " + DIM + "      %s   %s" % (s["workspace"]["name"], s["fullId"]) + OFF)
+print()
+')"
+      ;;
+    enable|disable)
+      [ $# -ge 1 ] || usage_error "Which stream? $PROG streams $sub <id>"
+      on="true"
+      [ "$sub" = "disable" ] && on="false"
+      BODY="$(api PATCH "/streams/$1" "{\"enabled\":$on}")"
+      [ "$JSON" = 1 ] && { printf '%s\n' "$BODY"; return 0; }
+      say "${C_OK}Stream ${sub}d.${C_OFF}"
+      ;;
+    *) usage_error "Unknown: streams $sub" ;;
+  esac
+}
+
+# -------------------------------------------------------------------- settings
+
+cmd_settings() {
+  BODY="$(api GET /settings)"
+  render "$(py '
+print()
+print("  " + BOLD + "Changeable here" + OFF + DIM + "   kernctl set <key> <value>" + OFF)
+print()
+for k, v in D["settings"].items():
+    value = v["value"]
+    if isinstance(value, bool): value = "yes" if value else "no"
+    elif isinstance(value, list): value = ", ".join(value) or DIM + "(any)" + OFF
+    elif value == "": value = DIM + "(none)" + OFF
+    source = "" if v["source"] == "stored" else DIM + "  from .env" + OFF
+    print("  %-22s %s%s" % (k, value, source))
+e = D["environment"]
+print()
+print("  " + BOLD + "From .env" + OFF + DIM + "   needs a restart to change" + OFF)
+print()
+mail = ("%s:%d as %s" % (e["mail"]["host"], e["mail"]["port"], e["mail"]["from"])) if e["mail"]["configured"] else WARN + "not configured" + OFF
+inbound = (e["inboundEmail"]["domain"] or "on") if e["inboundEmail"]["enabled"] else DIM + "off" + OFF
+reach = "loopback only" if e["admin"]["localOnly"] else "loopback and " + (", ".join(e["admin"]["allowFrom"]) or WARN + "nothing" + OFF)
+for k, v in [
+    ("publicUrl", e["publicUrl"]),
+    ("apiUrl", e["apiUrl"]),
+    ("appScheme", e["appScheme"] + "://"),
+    ("listening", "%s:%d" % (e["host"], e["port"])),
+    ("mail", mail),
+    ("inboundEmail", inbound),
+    ("management", reach),
+    ("streamsKey", "set" if e["streamsKeySet"] else WARN + "derived from the session secret" + OFF),
+    ("inviteExpiry", "%d days" % e["inviteDays"]),
+]:
+    print("  %-22s %s" % (k, v))
+print()
+')"
+}
+
+cmd_set() {
+  [ $# -ge 2 ] || usage_error "$PROG set <key> <value>
+Keys: $PROG settings    Value \"default\" falls back to .env"
+  key="$1"; shift
+  value="$*"
+  if [ "$value" = "default" ]; then
+    payload="{\"$key\":null}"
+  else
+    case "$key" in
+      maxUsers)
+        case "$value" in
+          ''|*[!0-9]*) usage_error "maxUsers takes a whole number (0 for no limit)." ;;
+        esac
+        payload="{\"$key\":$value}"
+        ;;
+      sharesEnabled)
+        case "$value" in
+          true|yes|on|1) payload="{\"$key\":true}" ;;
+          false|no|off|0) payload="{\"$key\":false}" ;;
+          *) usage_error "sharesEnabled takes yes or no." ;;
+        esac
+        ;;
+      *) payload="{\"$key\":$(json_quote "$value")}" ;;
+    esac
+  fi
+  BODY="$(api PATCH /settings "$payload")"
+  [ "$JSON" = 1 ] && { printf '%s\n' "$BODY"; return 0; }
+  if [ "$value" = "default" ]; then
+    say "${C_OK}$key follows .env again.${C_OFF}"
+  else
+    say "${C_OK}$key is now $value.${C_OFF}"
+  fi
+  case "$key" in
+    registration) say "${C_DIM}Apps see this on their sign-in screen straight away.${C_OFF}" ;;
+    instanceName) say "${C_DIM}Emails and invite pages use the new name from the next one sent.${C_OFF}" ;;
+  esac
+}
+
+# ---------------------------------------------------------------------- tokens
+
+cmd_token() {
+  sub="${1:-list}"
+  [ $# -gt 0 ] && shift
+  case "$sub" in
+    list)
+      BODY="$(api GET /tokens)"
+      render "$(py '
+print()
+for t in D["tokens"]:
+    state = (DIM + "revoked" + OFF) if t["revokedAt"] else (OK + "active " + OFF)
+    used = when(t["lastUsedAt"]) if t["lastUsedAt"] else "never used"
+    here = DIM + "  (this one)" + OFF if t["current"] else ""
+    print("  %s  %s %-5s %-17s %s%s" % (t["id"], state, t["scope"], used, t["name"], here))
+print()
+')"
+      ;;
+    new|create)
+      [ $# -ge 1 ] || usage_error "Name it: $PROG token new \"Laptop\" [--read] [--days 90]"
+      name="$1"; shift
+      scope="full"; days="null"
+      while [ $# -gt 0 ]; do
+        case "$1" in
+          --read) scope="read" ;;
+          --days) days="${2:?--days needs a number}"; shift ;;
+          *) usage_error "Unexpected argument: $1" ;;
+        esac
+        shift
+      done
+      BODY="$(api POST /tokens "{\"name\":$(json_quote "$name"),\"scope\":\"$scope\",\"days\":$days}")"
+      [ "$JSON" = 1 ] && { printf '%s\n' "$BODY"; return 0; }
+      say ""
+      say "  ${C_B}$(json_str "$BODY" token)${C_OFF}"
+      say ""
+      say "  ${C_DIM}Scope $scope. That is the only time it is shown.${C_OFF}"
+      say ""
+      ;;
+    revoke)
+      [ $# -ge 1 ] || usage_error "Which token? $PROG token revoke <id>"
+      BODY="$(api DELETE "/tokens/$1")"
+      [ "$JSON" = 1 ] && { printf '%s\n' "$BODY"; return 0; }
+      say "${C_OK}Revoked $1.${C_OFF}"
+      ;;
+    *) usage_error "Unknown: token $sub" ;;
+  esac
+}
+
+# ----------------------------------------------------------------------- pair
+#
+# Hands Kern Platform everything it needs in one paste.
+
+cmd_pair() {
+  name="${1:-Kern Platform}"
+  BODY="$(api POST /tokens "{\"name\":$(json_quote "$name"),\"scope\":\"full\",\"days\":null}")"
+  token="$(json_str "$BODY" token)"
+  ping="$(api GET /ping)"
+  instance="$(json_str "$ping" instance)"
+
+  if [ "$JSON" = 1 ]; then
+    printf '{"url":"%s","token":"%s","instance":"%s"}\n' "$API" "$token" "$instance"
+    return 0
+  fi
+
+  code=""
+  if has_python; then
+    code="$(printf '{"url":"%s","token":"%s","name":"%s"}' "$API" "$token" "$instance" |
+      python3 -I -c 'import base64,sys; print("kern-platform:" + base64.urlsafe_b64encode(sys.stdin.buffer.read()).decode().rstrip("="))')"
+  fi
+
+  say ""
+  say "  ${C_B}$instance${C_OFF} is ready to manage."
+  say ""
+  say "  Server    ${C_B}$API${C_OFF}"
+  say "  Token     ${C_B}$token${C_OFF}"
+  if [ -n "$code" ]; then
+    say ""
+    say "  Or paste this single line into Kern Platform:"
+    say ""
+    say "  ${C_B}$code${C_OFF}"
+  fi
+  say ""
+  say "  ${C_DIM}The token is shown once. If this server listens on loopback only,"
+  say "  forward the port first:  ssh -L 8787:127.0.0.1:8787 ${USER:-you}@$(hostname 2>/dev/null || echo server)${C_OFF}"
+  say ""
+}
+
+# ------------------------------------------------------------- logs and audit
+
+show_logs() {
+  render "$(py '
+colour = {"info": "", "warn": WARN, "error": ERR}
+for l in D["lines"]:
+    print(DIM + l["at"][11:19] + OFF + " " + colour[l["level"]] + l["text"] + OFF)
+')"
+}
+
+cmd_logs() {
+  follow=0; level=""; limit=200
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -f|--follow) follow=1 ;;
+      --level) level="${2:?--level needs warn or error}"; shift ;;
+      -n|--lines) limit="${2:?-n needs a number}"; shift ;;
+      *) usage_error "Unexpected argument: $1" ;;
+    esac
+    shift
+  done
+  since=0
+  while :; do
+    BODY="$(api GET "/logs?since=$since&limit=$limit&level=$level")"
+    if [ "$JSON" = 1 ]; then
+      printf '%s\n' "$BODY"
+      return 0
+    fi
+    show_logs
+    [ "$follow" = 1 ] || break
+    latest="$(json_num "$BODY" latest)"
+    since="${latest:-$since}"
+    limit=200
+    sleep 2
+  done
+}
+
+cmd_audit() {
+  BODY="$(api GET "/audit?limit=${1:-50}")"
+  render "$(py '
+import json as _json
+print()
+for e in D["entries"]:
+    print("  " + DIM + when(e["at"]) + OFF + "  %-26s %s" % (e["action"], e["target"] or ""))
+    if e["detail"]:
+        print("  " + DIM + " " * 18 + "  " + _json.dumps(e["detail"])[:90]
+              + "   by " + str(e["by"] or "?") + " from " + str(e["ip"] or "?") + OFF)
+print()
+')"
+}
+
+cmd_notice() {
+  [ $# -ge 1 ] || usage_error "$PROG notice \"Restarting in five minutes\" [--warn]"
+  level="info"
+  message=""
+  for arg in "$@"; do
+    case "$arg" in
+      --warn) level="warn" ;;
+      *) message="${message:+$message }$arg" ;;
+    esac
+  done
+  [ -n "$message" ] || usage_error "Nothing to say."
+  BODY="$(api POST /notice "{\"message\":$(json_quote "$message"),\"level\":\"$level\"}")"
+  [ "$JSON" = 1 ] && { printf '%s\n' "$BODY"; return 0; }
+  say "${C_OK}Sent to $(json_str "$BODY" to).${C_OFF}"
+}
+
+cmd_query() {
+  [ $# -ge 1 ] || usage_error "$PROG query \"SELECT count(*) FROM kern_space\""
+  BODY="$(api POST /query "{\"sql\":$(json_quote "$*"),\"limit\":200}")"
+  render "$(py '
+fields, rows = D["fields"], D["rows"]
+if not rows:
+    print("  No rows.")
+    raise SystemExit
+widths = []
+for f in fields:
+    widths.append(min(max([len(f)] + [len(str(r.get(f, ""))) for r in rows]), 40))
+print()
+print("  " + "  ".join(f.upper()[:w].ljust(w) for f, w in zip(fields, widths)))
+for r in rows:
+    print("  " + "  ".join(str(r.get(f, ""))[:w].ljust(w) for f, w in zip(fields, widths)))
+print()
+print("  %d row(s)" % D["rowCount"] + ("   (truncated)" if D["truncated"] else ""))
+print()
+')"
+}
+
+# --------------------------------------------------------- backup and restore
+#
+# A backup is a pg_dump. It runs where the database is: inside the compose
+# project, or against DATABASE_URL on this machine.
+
+cmd_backup() {
+  detect_service
+  out="${1:-kern-$(date +%Y%m%d-%H%M%S).sql.gz}"
+  case "$SERVICE" in
+    compose)
+      say "Dumping the database from the compose project in $HOME_DIR…"
+      compose exec -T db pg_dump -U kern -d kern --clean --if-exists | gzip > "$out"
+      ;;
+    *)
+      need pg_dump
+      [ -n "${DATABASE_URL:-}" ] || die "Set DATABASE_URL so pg_dump knows where to look." 2
+      pg_dump "$DATABASE_URL" --clean --if-exists | gzip > "$out"
+      ;;
+  esac
+  say "${C_OK}Wrote $out${C_OFF} ($(ls -lh "$out" | awk '{print $5}'))"
+  say ""
+  say "${C_DIM}Keep .env with it. Without BETTER_AUTH_SECRET and STREAMS_ENCRYPTION_KEY, a"
+  say "restored dump can't decrypt stream credentials and everyone must sign in again.${C_OFF}"
+}
+
+cmd_restore() {
+  [ $# -ge 1 ] || usage_error "$PROG restore <file.sql.gz>"
+  file="$1"
+  [ -r "$file" ] || die "Can't read $file." 2
+  detect_service
+  confirm "This replaces everything in the database with the contents of $file."
+  case "$SERVICE" in
+    compose)
+      if [ "${file%.gz}" != "$file" ]; then
+        gunzip -c "$file" | compose exec -T db psql -U kern -d kern -q
+      else
+        compose exec -T db psql -U kern -d kern -q < "$file"
+      fi
+      say "Restarting the API so it migrates and reloads its settings…"
+      compose restart api
+      ;;
+    *)
+      need psql
+      [ -n "${DATABASE_URL:-}" ] || die "Set DATABASE_URL so psql knows where to look." 2
+      if [ "${file%.gz}" != "$file" ]; then
+        gunzip -c "$file" | psql "$DATABASE_URL" -q
+      else
+        psql "$DATABASE_URL" -q < "$file"
+      fi
+      ;;
+  esac
+  say "${C_OK}Restored.${C_OFF} Run \`$PROG heal\` to tidy up afterwards."
+}
+
+# ------------------------------------------------------------------------ use
+
+cmd_use() {
+  [ $# -ge 1 ] || usage_error "$PROG use <url> [--token kern_…]"
+  new_url="$1"; shift
+  new_token=""
+  [ "${1:-}" = "--token" ] && new_token="${2:?--token needs a token}"
+  mkdir -p "$(dirname "$USER_CONFIG")"
+  {
+    printf '# Written by kernctl use\n'
+    printf 'KERN_URL=%s\n' "$new_url"
+    [ -n "$new_token" ] && printf 'KERN_ADMIN_TOKEN=%s\n' "$new_token"
+    [ -n "$CFG_HOME" ] && printf 'KERN_HOME=%s\n' "$CFG_HOME"
+    [ -n "$CFG_SERVICE" ] && printf 'KERN_SERVICE=%s\n' "$CFG_SERVICE"
+  } > "$USER_CONFIG"
+  chmod 600 "$USER_CONFIG"
+  say "${C_OK}kernctl now talks to $new_url.${C_OFF} ${C_DIM}($USER_CONFIG)${C_OFF}"
+}
+
+cmd_version() { printf '%s %s\n' "$PROG" "$VERSION"; }
+
+cmd_help() {
+  cat <<HELP
+$PROG - manage a self-hosted Kern server
+
+  Usage: $PROG [--url URL] [--token TOKEN] [--json] [--yes] <command>
+
+Looking at it
+  status                      what this instance is, and how much is in it
+  health [--fix] [--fix=ID]   run every check; repair what can be repaired
+  heal                        repair everything, then check again
+  doctor                      this machine, and the path to the server
+  logs [-f] [--level warn]    recent server log (in memory; empty after a restart)
+  audit [N]                   what management tokens have done
+  query "SELECT …"            a read-only look at the database
+
+People
+  users list [-q TEXT] [--held] [--unverified]
+  users show <email|id>
+  users hold <email> [reason]           suspend: no new sessions, data untouched
+  users release <email>
+  users verify <email>                  mark the address verified (no SMTP needed)
+  users revoke-sessions <email>
+  users delete <email> [--with-workspaces]
+  allow list | add <email> [note] | remove <email>
+
+Their work
+  spaces list [-q TEXT] [--personal|--workspaces] [--deleted]
+  spaces show <id>
+  spaces delete <id> [--purge]
+  invites list | revoke <id>
+  streams list | enable <id> | disable <id>
+
+The instance
+  settings                    every setting, and where it comes from
+  set <key> <value>           change one ("default" falls back to .env)
+  notice "TEXT" [--warn]      tell everyone currently connected something
+  token list | new "NAME" [--read] [--days N] | revoke <id>
+  pair ["NAME"]               an address and token for Kern Platform, in one paste
+
+Running it
+  service status|start|stop|restart|logs|upgrade
+  backup [FILE]               pg_dump, gzipped
+  restore <FILE>
+  use <url> [--token T]       remember which server to manage
+  version | help
+
+Exit codes: 0 fine, 1 refused, 2 called wrongly, 3 unreachable, 4 health failing.
+HELP
+}
+
+# ------------------------------------------------------------------ dispatch
+
+CMD=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --url) URL="${2:?--url needs an address}"; shift ;;
+    --token) TOKEN="${2:?--token needs a token}"; shift ;;
+    --json) JSON=1 ;;
+    --yes|-y) YES=1 ;;
+    --quiet) QUIET=1 ;;
+    -h|--help) CMD="help"; break ;;
+    -V|--version) CMD="version"; break ;;
+    -*) usage_error "Unknown option: $1" ;;
+    *) CMD="$1"; shift; break ;;
+  esac
+  shift
+done
+
+[ -z "$CMD" ] && { cmd_help; exit 0; }
+
+case "$CMD" in
+  help|version) ;;
+  *) resolve ;;
+esac
+
+case "$CMD" in
+  status) cmd_status "$@" ;;
+  health|check) cmd_health "$@" ;;
+  heal|repair) cmd_heal "$@" ;;
+  doctor) cmd_doctor "$@" ;;
+  users|user) cmd_users "$@" ;;
+  allow) cmd_allow "$@" ;;
+  spaces|space) cmd_spaces "$@" ;;
+  invites|invite) cmd_invites "$@" ;;
+  streams|stream) cmd_streams "$@" ;;
+  settings) cmd_settings "$@" ;;
+  set) cmd_set "$@" ;;
+  token|tokens) cmd_token "$@" ;;
+  pair) cmd_pair "$@" ;;
+  logs|log) cmd_logs "$@" ;;
+  audit) cmd_audit "$@" ;;
+  notice) cmd_notice "$@" ;;
+  query|sql) cmd_query "$@" ;;
+  backup) cmd_backup "$@" ;;
+  restore) cmd_restore "$@" ;;
+  service)
+    [ $# -ge 1 ] || usage_error "service what? status, start, stop, restart, logs, upgrade"
+    action="$1"; shift
+    case "$action" in
+      status|start|stop|restart|logs|upgrade) service_cmd "$action" "${1:-200}" ;;
+      *) usage_error "Unknown: service $action" ;;
+    esac
+    ;;
+  use) cmd_use "$@" ;;
+  version) cmd_version ;;
+  help) cmd_help ;;
+  *) usage_error "Unknown command: $CMD" ;;
+esac
