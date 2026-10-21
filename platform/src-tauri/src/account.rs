@@ -161,7 +161,7 @@ pub fn sign_in(config_dir: &PathBuf, raw_url: &str, email: &str, password: &str)
         Some(s) => s,
         None => servers::add(config_dir, &owner.instance, &base, None)?,
     };
-    servers::set_token(&session_key(&server.id), &token)?;
+    servers::set_secret(&session_key(&server.id), &token)?;
     servers::select(config_dir, &server.id)?;
     servers::note_connection(config_dir, &server.id, Some(owner.instance.clone()), None)?;
     Ok((server, owner))

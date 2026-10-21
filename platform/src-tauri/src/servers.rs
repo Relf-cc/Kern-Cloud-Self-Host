@@ -204,6 +204,19 @@ pub fn token_of(id: &str) -> Option<String> {
     entry(id).ok().and_then(|e| e.get_password().ok()).filter(|t| !t.trim().is_empty())
 }
 
+/// Saves a credential as it is, without looking at it. Account sessions are
+/// opaque strings the server issues and have no shape worth checking, so only
+/// the management-token path below inspects one.
+pub fn set_secret(id: &str, secret: &str) -> AppResult<()> {
+    let secret = secret.trim();
+    if secret.is_empty() {
+        return Err(AppError::Invalid("There is nothing to save.".into()));
+    }
+    entry(id)?
+        .set_password(secret)
+        .map_err(|e| AppError::Io(format!("Couldn't save the token to the credential store: {e}")))
+}
+
 pub fn set_token(id: &str, token: &str) -> AppResult<()> {
     let token = token.trim();
     if !looks_like_token(token) {
@@ -211,9 +224,7 @@ pub fn set_token(id: &str, token: &str) -> AppResult<()> {
             "That doesn't look like a management token. They read kern_<16 characters>_<secret>, and `kernctl token new` on the server prints one.".into(),
         ));
     }
-    entry(id)?
-        .set_password(token)
-        .map_err(|e| AppError::Io(format!("Couldn't save the token to the credential store: {e}")))
+    set_secret(id, token)
 }
 
 pub fn forget_token(id: &str) -> AppResult<()> {
