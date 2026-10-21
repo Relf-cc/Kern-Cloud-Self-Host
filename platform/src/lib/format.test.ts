@@ -50,6 +50,18 @@ describe("how long ago", () => {
     expect(ago("2026-11-04T12:00:00.000Z", now)).toBe("in 14 days");
     expect(ago("2026-10-21T13:00:00.000Z", now)).toBe("in 1 hour");
   });
+
+  it("steps up a unit before the smaller one fills, so nothing reads 60 minutes", () => {
+    expect(ago("2026-10-21T11:00:00.000Z", now)).toBe("1 hour ago");
+    expect(ago("2026-10-21T10:50:00.000Z", now)).toBe("1 hour ago");
+    expect(ago("2026-10-20T15:00:00.000Z", now)).toBe("21 hours ago");
+    // Past 22 hours it rounds up to the day rather than saying "24 hours".
+    expect(ago("2026-10-20T13:00:00.000Z", now)).toBe("1 day ago");
+    expect(ago("2026-10-20T12:00:00.000Z", now)).toBe("1 day ago");
+    expect(ago("2026-09-27T12:00:00.000Z", now)).toBe("24 days ago");
+    expect(ago("2026-09-01T12:00:00.000Z", now)).toBe("2 months ago");
+    expect(ago("2025-10-21T12:00:00.000Z", now)).toBe("1 year ago");
+  });
 });
 
 describe("addresses and ids", () => {

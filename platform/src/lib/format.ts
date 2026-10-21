@@ -69,12 +69,24 @@ export function ago(iso: string | null | undefined, now = Date.now()): string {
     const plural = `${n} ${unit}${n === 1 ? "" : "s"}`;
     return future ? `in ${plural}` : `${plural} ago`;
   };
+  // The thresholds step up before the smaller unit reaches a whole one of the
+  // larger, so nothing ever reads "60 minutes" or "24 hours".
+  const MINUTE = 60;
+  const HOUR = 60 * MINUTE;
+  const DAY = 24 * HOUR;
+  const MONTH = 30.44 * DAY;
+  const YEAR = 365.25 * DAY;
   if (abs < 45) return future ? "in a moment" : "just now";
-  if (abs < 5400) return say(Math.round(abs / 60), "minute");
-  if (abs < 129600) return say(Math.round(abs / 3600), "hour");
-  if (abs < 2592000) return say(Math.round(abs / 86400), "day");
-  if (abs < 31536000) return say(Math.round(abs / 2592000), "month");
-  return say(Math.round(abs / 31536000), "year");
+  if (abs < 90) return say(1, "minute");
+  if (abs < 45 * MINUTE) return say(Math.round(abs / MINUTE), "minute");
+  if (abs < 90 * MINUTE) return say(1, "hour");
+  if (abs < 22 * HOUR) return say(Math.round(abs / HOUR), "hour");
+  if (abs < 36 * HOUR) return say(1, "day");
+  if (abs < 26 * DAY) return say(Math.round(abs / DAY), "day");
+  if (abs < 46 * DAY) return say(1, "month");
+  if (abs < 320 * DAY) return say(Math.round(abs / MONTH), "month");
+  if (abs < 548 * DAY) return say(1, "year");
+  return say(Math.round(abs / YEAR), "year");
 }
 
 /** The host out of an API base, for the places that show it small. */
