@@ -70,7 +70,7 @@ function load() {
      * whoever is wiring up a form can read why. Point it at your own copy of
      * docs/streams.md if you publish one.
      */
-    streamsDocsUrl: optional("STREAMS_DOCS_URL", "https://github.com/kern-platform/kern-self-host/blob/main/docs/streams.md"),
+    streamsDocsUrl: optional("STREAMS_DOCS_URL", "https://github.com/Relf-cc/Kern-Cloud-Self-Host/blob/main/docs/streams.md"),
     /**
      * What this instance calls itself: shown in emails, on the hand-off pages
      * and in Kern Platform. Name it after the team or the host.

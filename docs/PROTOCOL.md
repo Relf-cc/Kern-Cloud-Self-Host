@@ -65,11 +65,11 @@ GET /kern/v1/instance
 {
   "service": "kern-cloud",
   "protocol": 1,
-  "name": "Acme Labs",
-  "apiUrl": "https://kern.example.com/kern/v1",
+  "name": "Relf",
+  "apiUrl": "https://api.relf.cc/kern/v1",
   "registration": "invite",
   "notice": "Maintenance Sunday 02:00 UTC",
-  "contact": "admin@example.com",
+  "contact": "admin@relf.cc",
   "features": {
     "workspaces": true,
     "assets": true,
@@ -118,7 +118,7 @@ plainly:
 Three things guard it, in order of how much they actually matter:
 
 1. **A token belongs to one origin.** The credential-store entry is keyed by
-   host (`kern-cloud-session@kern.example.com`), so pointing Kern at another
+   host (`kern-cloud-session@api.relf.cc`), so pointing Kern at another
    server does not carry the existing session there — the new server simply has
    no token and asks for a sign-in. *This is the part that defuses the attack:
    even a silent switch yields nothing.*
@@ -139,8 +139,8 @@ Where a token may be sent at all:
 | `http://` a public address | **no** | The session would cross the internet in the clear |
 
 Addresses are normalised on the way in: a bare host gets `https://`, and
-`/kern/v1` is appended unless it is already there. `kern.example.com` and
-`https://kern.example.com/kern/v1/` are the same server.
+`/kern/v1` is appended unless it is already there. `api.relf.cc` and
+`https://api.relf.cc/kern/v1/` are the same server.
 
 The commands the interface calls, all in `domain/cloud/mod.rs`:
 
@@ -252,7 +252,7 @@ Short-lived and single-use. Then the WebSocket, at the API base with the
 scheme swapped (`https` → `wss`):
 
 ```
-wss://kern.example.com/kern/v1/realtime?ticket=…
+wss://api.relf.cc/kern/v1/realtime?ticket=…
 ```
 
 The client subscribes to the spaces it has open. The server pushes:
@@ -293,7 +293,7 @@ Three rules hold throughout the management API:
   the data either.
 - **Destructive actions name what they will destroy.** Deleting an account or
   purging a workspace takes the name or email as confirmation
-  (`?confirm=alice@example.com`, or `confirm` in a JSON body), so a mistyped id
+  (`?confirm=alice@relf.cc`, or `confirm` in a JSON body), so a mistyped id
   can't take out the wrong one.
 - **Everything that changes something is recorded** in `kern_admin_audit`, with
   the token that did it.
@@ -347,7 +347,7 @@ is error-prone, so `kernctl` mints one and encodes both into a single line:
 ```sh
 $ kernctl pair "Kern Platform"
 
-  Acme Labs is ready to manage.
+  Relf is ready to manage.
 
   Server    http://127.0.0.1:8787/kern/v1
   Token     kern_a1b2c3d4e5f60718_…

@@ -23,8 +23,13 @@ own log. You create them in Kern: **Streams → New stream.**
 ## The address
 
 ```
-POST https://kern.example.com/kern/<64 hex characters>
+POST https://streams.relf.cc/kern/<64 hex characters>
 ```
+
+Stream endpoints are served on their own hostname, `streams.relf.cc`, separate
+from the API that the Kern app signs in to — so an address you paste into a
+form, a webhook or a third-party tool carries nothing else. (Self-hosters set
+this with `STREAMS_URL`; left unset it follows `PUBLIC_URL`.)
 
 The hex part is the stream's id, and it is the whole credential for a public
 stream: anyone who has the address can post to it. Treat it like a secret URL.
@@ -36,9 +41,9 @@ address stops working and the new one takes its place.
 JSON, and that is all you need:
 
 ```sh
-curl -X POST https://kern.example.com/kern/a1b2c3… \
+curl -X POST https://streams.relf.cc/kern/a1b2c3… \
   -H 'Content-Type: application/json' \
-  -d '{"title":"Boiler making a noise","email":"sam@example.com","notes":"Started this morning."}'
+  -d '{"title":"Boiler making a noise","email":"sam@relf.cc","notes":"Started this morning."}'
 ```
 
 ```json
@@ -98,7 +103,7 @@ address that anyone may hold shouldn't be a way to learn what is in the space.
 A bearer secret, shown once when you create or rotate it:
 
 ```sh
-curl -X POST https://kern.example.com/kern/a1b2c3… \
+curl -X POST https://streams.relf.cc/kern/a1b2c3… \
   -H 'Authorization: Bearer kss_…' \
   -H 'Content-Type: application/json' \
   -d '{"title":"Disk 80% full on web-1"}'
@@ -127,7 +132,7 @@ body='{"title":"Deploy failed","run":"4821"}'
 t=$(date +%s)
 sig=$(printf '%s.%s' "$t" "$body" | openssl dgst -sha256 -hmac "$SECRET" -hex | awk '{print $2}')
 
-curl -X POST https://kern.example.com/kern/a1b2c3… \
+curl -X POST https://streams.relf.cc/kern/a1b2c3… \
   -H "Kern-Signature: t=$t,v1=$sig" \
   -H 'Content-Type: application/json' \
   -d "$body"
@@ -221,7 +226,7 @@ without the sender doing anything.
 Post straight to the address — no JavaScript:
 
 ```html
-<form method="POST" action="https://kern.example.com/kern/a1b2c3…">
+<form method="POST" action="https://streams.relf.cc/kern/a1b2c3…">
   <input name="title" placeholder="Subject" required>
   <input name="email" type="email" placeholder="Your email">
   <textarea name="notes"></textarea>
@@ -238,11 +243,12 @@ Set a **redirect** on the stream and the browser is sent there afterwards with
 Without one, Kern serves a small page of its own.
 
 Each stream has its own **allowed origins** list, which is what its CORS reply
-is built from. Add your site (`https://example.com`, or
-`https://*.example.com`) or a browser post will be refused before it arrives.
+is built from. Add the site the form is on (`https://relf.cc`, or
+`https://*.relf.cc` for every subdomain) or a browser post will be refused
+before it arrives.
 
 There is also a **capture page** for each stream, at
-`/kern/<id>/capture#k=<secret>`: Kern's own hosted form, for sending something
+`https://streams.relf.cc/kern/<id>/capture#k=<secret>`: Kern's own hosted form, for sending something
 from a phone with nothing to build. The secret rides in the URL fragment, so it
 is never sent to the server as part of the request — keep the whole link
 private, and rotate the stream if it leaks.
@@ -250,7 +256,7 @@ private, and rotate the stream if it leaks.
 ## Email
 
 If the server's administrator has set up inbound email, a stream can have an
-address — `<alias>@in.example.com`, where the alias is a random 20-character
+address — `<alias>@in.relf.cc`, where the alias is a random 20-character
 string the stream generates — and anything sent to it becomes a submission: the
 subject is the title, the body is the body. `+tags` on the address are ignored,
 so `alias+invoices@…` reaches the same stream.

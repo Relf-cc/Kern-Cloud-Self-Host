@@ -1,0 +1,5 @@
+# POSIX shell scripts must keep LF endings. A CRLF shebang makes Linux refuse
+# the script outright ("bad interpreter: /bin/sh^M"), which breaks both the
+# installer and kernctl however they are fetched.
+*.sh      text eol=lf
+cli/kernctl text eol=lf

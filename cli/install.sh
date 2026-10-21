@@ -2,7 +2,7 @@
 # Install a self-hosted Kern server on Linux.
 #
 #   curl -fsSL https://.../install.sh | sudo sh
-#   sudo ./cli/install.sh --url https://kern.example.com --name "Acme Labs"
+#   sudo ./cli/install.sh --url https://api.relf.cc --name "Relf"
 #
 # Two shapes, and it picks for you:
 #
@@ -531,7 +531,7 @@ say "  ${C_B}kernctl status${C_OFF}              see what it is doing"
 say "  ${C_B}kernctl heal${C_OFF}                run every check and repair what it can"
 say "  ${C_B}kernctl pair${C_OFF}                an address and token for Kern Platform"
 if [ "$REGISTRATION" = "invite" ]; then
-  say "  ${C_B}kernctl allow add you@example.com${C_OFF}"
+  say "  ${C_B}kernctl allow add you@relf.cc${C_OFF}"
   say "                              ${C_DIM}let yourself sign up (the first account is always allowed)${C_OFF}"
 fi
 say ""

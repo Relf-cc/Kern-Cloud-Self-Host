@@ -44,7 +44,7 @@ your own PostgreSQL if not, generates the secrets, writes `.env`, starts the
 server and installs `kernctl`:
 
 ```sh
-sudo ./cli/install.sh --url https://kern.example.com --name "Acme Labs"
+sudo ./cli/install.sh --url https://api.relf.cc --name "Relf"
 ```
 
 It finishes by printing a single line beginning `kern-platform:` — paste that
@@ -54,20 +54,41 @@ than resets: an existing `.env` keeps its secrets.
 With Docker and nothing else:
 
 ```sh
-cp .env.example .env     # it asks for four values; the rest have defaults
+cp .env.example .env     # addresses are set; generate the three secrets
 docker compose up -d --build
 docker compose logs api  # the first management token, printed once
 ```
 
-The API is published on `127.0.0.1:8787` only. That is deliberate — see
-[docs/SELF-HOSTING.md](docs/SELF-HOSTING.md) for putting TLS in front of it,
-which you must do before anybody else syncs to it.
+The API is published on `127.0.0.1:8787` only. That is deliberate, and it stays
+that way: this instance is reached through a **Cloudflare Tunnel**, so
+`cloudflared` dials out from the server and no inbound port is ever opened, no
+certificate lives on the box and no origin IP appears in DNS. A reverse proxy
+with its own certificate is the alternative. Either way, see
+[docs/SELF-HOSTING.md](docs/SELF-HOSTING.md#putting-it-on-the-internet) before
+anybody else syncs to it.
+
+### The addresses
+
+Two hostnames, both to the same machine and the same process:
+
+| | | |
+|---|---|---|
+| `api.relf.cc` | `PUBLIC_URL` | What the Kern app talks to: the API, the realtime socket, sign-in, invite and share links. |
+| `streams.relf.cc` | `STREAMS_URL` | Stream endpoints and their phone capture pages, so an address pasted into a form or a webhook never carries the API host. |
+
+The tunnel's ingress rules narrow the second name to stream paths only, and
+refuse the management API on both — which matters more than it looks, because
+`cloudflared` connects from `127.0.0.1` and the server allows loopback
+unconditionally.
+[docs/SELF-HOSTING.md](docs/SELF-HOSTING.md#putting-it-on-the-internet) has the
+ingress rules, the DNS, and Caddy and nginx for the proxy route.
 
 ## Point Kern at it
 
-In Kern: **Settings → Account & Cloud → Kern server → Add…** Type the address,
-and Kern asks it what it is before saving anything. Your account on your server
-is separate from every other Kern server, so it asks you to sign in there.
+In Kern: **Settings → Account & Cloud → Kern server → Add…** Type
+`https://api.relf.cc`, and Kern asks it what it is before saving anything. Your
+account on your server is separate from every other Kern server, so it asks you
+to sign in there.
 
 Over plain HTTP, Kern will only sign in to this machine (`127.0.0.1`,
 `localhost`) or a private network — never a public address, because the session
@@ -110,9 +131,10 @@ health failing.
 ## Configuration
 
 Everything is environment variables; [`.env.example`](.env.example) documents
-each one next to a working default. Only four have to be set:
-`POSTGRES_PASSWORD`, `BETTER_AUTH_SECRET`, `STREAMS_ENCRYPTION_KEY` and
-`PUBLIC_URL`. The installer generates the first three for you.
+each one next to a working default. `PUBLIC_URL` and `STREAMS_URL` are already
+set to this instance's hostnames, so only three secrets have to be generated:
+`POSTGRES_PASSWORD`, `BETTER_AUTH_SECRET` and `STREAMS_ENCRYPTION_KEY`. The
+installer generates all three for you.
 
 A few that decide the shape of your instance:
 
