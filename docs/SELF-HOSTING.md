@@ -348,6 +348,29 @@ To move a token-installed tunnel back to a file, delete the service, run
 sudo cloudflared service uninstall
 ```
 
+#### As a container in this compose project
+
+`docker-compose.yml` carries a `tunnel` service, off unless you ask for it.
+For a home server with no public address, this is the least moving parts:
+
+```sh
+echo 'CLOUDFLARE_TUNNEL_TOKEN=…' >> .env
+docker compose --profile tunnel up -d
+```
+
+**Its routes point at `http://api:8787`, not `127.0.0.1:8787`** — the service
+name on the compose network. Inside the connector's container, `127.0.0.1` is
+the connector, and the API is a different container; a route to loopback there
+is refused every time. That is the single most common way to get a 502 out of
+this arrangement.
+
+A connector on the host, installed with `cloudflared service install`, is the
+other way round: it uses `127.0.0.1:8787`, and only works because the `api`
+service publishes that port. **Do not run both.** Cloudflare balances traffic
+across every healthy connector for a tunnel, so one of each means roughly half
+of all requests go to the one that cannot reach the API — intermittent 502s,
+which are far worse to diagnose than a clean failure.
+
 #### Why rule 1 is load-bearing
 
 The management API is loopback-only by default (`ADMIN_LOCAL_ONLY=true`), and
@@ -404,7 +427,11 @@ going near Cloudflare.
 - **Client addresses** arrive as `CF-Connecting-IP`, which is what the server
   reads for stream rate limits and sign-in records — so per-sender limits and a
   stream's address allowlist keep working. Without that header everything would
-  look like one sender, the tunnel itself.
+  look like one sender, the tunnel itself. The server trusts that header
+  without question, which is right when Cloudflare is the only way in and
+  wrong the moment it isn't: **anything that can reach port 8787 directly can
+  set it to whatever it likes** and walk through a rate limit or an address
+  allowlist. That is another reason the port stays on loopback.
 - **Caching** needs nothing. Cloudflare does not cache these responses by
   default, and no rule should be added that would.
 

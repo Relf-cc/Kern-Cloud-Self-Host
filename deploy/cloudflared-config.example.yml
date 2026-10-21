@@ -1,0 +1,50 @@
+# A locally-managed Cloudflare Tunnel, as an alternative to the token-based
+# one in docker-compose.yml.
+#
+#   cloudflared tunnel login
+#   cloudflared tunnel create kern
+#   cloudflared tunnel route dns kern api.relf.cc
+#   cloudflared tunnel route dns kern streams.relf.cc
+#   cp deploy/cloudflared-config.example.yml /etc/cloudflared/config.yml
+#   cloudflared tunnel ingress validate
+#
+# Rules are matched top to bottom and the first hit wins, so the management
+# API's refusal comes before the rule that would otherwise serve it, and each
+# hostname's catch-all comes after the specific rules for that name. See
+# docs/SELF-HOSTING.md#the-ingress-rules for the whole argument.
+#
+# `service` depends on where cloudflared runs:
+#
+#   as a container in this compose project   http://api:8787   (the service name)
+#   as a systemd service on the host         http://127.0.0.1:8787
+#
+# The second only works if docker-compose.yml publishes the port, which it
+# does on loopback. Running both at once means Cloudflare balances across them
+# and half the requests go to whichever one can't reach the API, so pick one.
+tunnel: kern
+credentials-file: /etc/cloudflared/kern.json
+
+ingress:
+  # 1. The management API, refused. This rule is load-bearing: cloudflared
+  #    connects from loopback (or from inside the Docker network), and the
+  #    server allows that unconditionally, so nothing else keeps /admin off
+  #    the internet. Enforce it at the Cloudflare WAF as well.
+  - hostname: api.relf.cc
+    path: "^/kern/v1/admin(/.*)?$"
+    service: http_status:404
+
+  # 2. The app: API, sign-in, the realtime socket, invite and share links.
+  - hostname: api.relf.cc
+    service: http://api:8787
+
+  # 3. Stream endpoints, capture pages, and a capture page's icon and manifest.
+  - hostname: streams.relf.cc
+    path: "^/kern/[0-9a-f]{64}(/capture(/.*)?)?$"
+    service: http://api:8787
+
+  # 4. Anything else on the streams name.
+  - hostname: streams.relf.cc
+    service: http_status:404
+
+  # 5. Required catch-all: any other hostname pointed at this tunnel.
+  - service: http_status:404

@@ -1,0 +1,12 @@
+# Copy to wrangler.toml, then:
+#   npm install postal-mime
+#   npx wrangler secret put KERN_INBOUND_SECRET   (same as INBOUND_EMAIL_SECRET)
+#   npx wrangler deploy
+# and in Cloudflare → Email → Email Routing for the inbound domain, add a
+# catch-all rule that sends to this worker.
+name = "kern-inbound-email"
+main = "email-worker.js"
+compatibility_date = "2026-01-01"
+
+[vars]
+KERN_INBOUND_URL = "https://api.relf.cc/kern/v1/inbound/email"

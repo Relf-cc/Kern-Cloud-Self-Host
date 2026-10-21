@@ -50,3 +50,33 @@ services:
     depends_on:
       db:
         condition: service_healthy
+
+  # A Cloudflare Tunnel, so the server can be reached without opening a port.
+  # Off by default, because the ordinary shape here is loopback plus whatever
+  # you already run in front. Turn it on for a home server with no public
+  # address:
+  #
+  #   CLOUDFLARE_TUNNEL_TOKEN=... in .env
+  #   docker compose --profile tunnel up -d
+  #
+  # Reaching the API from in here is `http://api:8787` - the service name on
+  # this network - not 127.0.0.1, which inside the connector's container is
+  # the connector itself. Point the tunnel's routes at `api:8787`.
+  #
+  # The API's loopback publish above stays either way: kernctl and Kern
+  # Platform manage the server over it, and the tunnel does not carry the
+  # management API (see docs/SELF-HOSTING.md - the ingress rules refuse it,
+  # and they have to, because cloudflared's requests arrive looking local).
+  tunnel:
+    profiles: ["tunnel"]
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      # Not `:?` - compose interpolates every service before it applies
+      # profiles, so a required variable here would stop `docker compose up`
+      # for everybody who isn't using the tunnel. Empty, cloudflared says so
+      # itself, and only when the profile is actually on.
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}
+    depends_on:
+      - api

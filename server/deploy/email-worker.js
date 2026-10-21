@@ -1,10 +1,10 @@
 // Cloudflare Email Worker for Kern's email-to-stream addresses
-// (<alias>@in.your-server.example). Cloudflare Email Routing hands every message for
+// (<alias>@in.relf.cc). Cloudflare Email Routing hands every message for
 // the inbound domain to this worker; it parses the message and posts the
 // essentials to Kern Cloud, which delivers it to the stream (usually the
 // Inbox). See ../../README.md → "Email to streams".
 //
-// Environment: KERN_INBOUND_URL (http://localhost:8787/kern/v1/inbound/email)
+// Environment: KERN_INBOUND_URL (https://api.relf.cc/kern/v1/inbound/email)
 // and the secret KERN_INBOUND_SECRET (same value as the server's
 // INBOUND_EMAIL_SECRET).
 
