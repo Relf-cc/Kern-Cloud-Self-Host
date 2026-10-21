@@ -1,7 +1,7 @@
 {
   "name": "kern-platform",
   "private": true,
-  "version": "0.0.2",
+  "version": "0.0.3",
   "type": "module",
   "description": "Kern Platform: manage a self-hosted Kern server",
   "license": "Apache-2.0",
