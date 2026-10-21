@@ -58,7 +58,3 @@ impl Serialize for AppError {
 }
 
 pub type AppResult<T> = Result<T, AppError>;
-
-pub fn invalid<T>(message: impl Into<String>) -> AppResult<T> {
-    Err(AppError::Invalid(message.into()))
-}

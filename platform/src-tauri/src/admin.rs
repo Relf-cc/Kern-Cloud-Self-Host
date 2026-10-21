@@ -69,16 +69,10 @@ fn send(url: &str, token: &str, method: &str, body: Option<&Value>, timeout: u64
     let auth = format!("Bearer {token}");
     let response = match method {
         "GET" => agent.get(url).header("Authorization", &auth).header("Accept", "application/json").call(),
-        "DELETE" => {
-            // DELETE carries a confirmation body on the destructive routes.
-            let payload = body.map(|b| b.to_string()).unwrap_or_else(|| "{}".into());
-            agent
-                .delete(url)
-                .header("Authorization", &auth)
-                .header("Accept", "application/json")
-                .header("Content-Type", "application/json")
-                .send(payload)
-        }
+        // No body on DELETE: the destructive routes take their confirmation
+        // in the query string, because a DELETE body is a lottery across HTTP
+        // clients - ureq won't send one at all.
+        "DELETE" => agent.delete(url).header("Authorization", &auth).header("Accept", "application/json").call(),
         "POST" | "PATCH" | "PUT" => {
             let payload = body.map(|b| b.to_string()).unwrap_or_else(|| "{}".into());
             let builder = match method {

@@ -20,7 +20,7 @@
 // Reaching it at all is governed by admin/guard.ts: loopback only, unless an
 // administrator has deliberately opened it up.
 
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { z } from "zod";
 import { config } from "../config.js";
 import { one, pool, query } from "../db.js";
@@ -51,12 +51,25 @@ function paging(c: { req: { query: (k: string) => string | undefined } }) {
   return parsed.data;
 }
 
-/** The email or name an administrator typed, to confirm a destructive action. */
-const confirmation = (expected: string, given: string | undefined, what: string) => {
-  if ((given ?? "").trim().toLowerCase() !== expected.trim().toLowerCase()) {
-    throw badRequest(`To confirm, send "confirm": "${expected}" - the ${what} you mean to remove.`, "confirm_required");
+/**
+ * The email or name an administrator typed, to confirm a destructive action.
+ *
+ * Taken from `?confirm=` or from a JSON body, because this guards DELETE
+ * routes and a DELETE with a required body is a client-by-client lottery -
+ * plenty of HTTP libraries won't send one at all. Either way the server
+ * insists on the name, so a mistyped id can't take out the wrong thing.
+ */
+async function confirmed(c: Context, expected: string, what: string): Promise<void> {
+  let given = c.req.query("confirm");
+  if (given === undefined) {
+    const raw = await c.req.json().catch(() => null);
+    const value = (raw as { confirm?: unknown } | null)?.confirm;
+    if (typeof value === "string") given = value;
   }
-};
+  if ((given ?? "").trim().toLowerCase() !== expected.trim().toLowerCase()) {
+    throw badRequest(`To confirm, repeat with ?confirm=${encodeURIComponent(expected)} - the ${what} you mean to remove.`, "confirm_required");
+  }
+}
 
 // ----------------------------------------------------------------- identity
 
@@ -287,8 +300,7 @@ admin.post("/users/:id/sessions/revoke", async (c) => {
 admin.delete("/users/:id", async (c) => {
   requireWrite(c.get("admin"));
   const user = await loadUser(c.req.param("id"));
-  const input = await body(c, z.object({ confirm: z.string().max(254).optional() }));
-  confirmation(user.email, input.confirm, "email address");
+  await confirmed(c, user.email, "email address");
   // Workspaces they own go with them; warn rather than silently take other
   // people's work with it.
   const shared = await query<{ name: string; members: string }>(
@@ -453,8 +465,7 @@ admin.delete("/spaces/:id", async (c) => {
   const space = await one<{ id: string; name: string; kind: string; deleted_at: Date | null }>("SELECT id, name, kind, deleted_at FROM kern_space WHERE id = $1", [id]);
   if (!space) throw notFound("That space");
   if (space.kind === "personal") throw badRequest("A personal space belongs to its account; delete the account instead.", "personal_space");
-  const input = await body(c, z.object({ confirm: z.string().max(200).optional() }));
-  confirmation(space.name, input.confirm, "workspace name");
+  await confirmed(c, space.name, "workspace name");
   const purge = c.req.query("purge") === "true";
   if (purge) {
     await query("DELETE FROM kern_space WHERE id = $1", [id]);

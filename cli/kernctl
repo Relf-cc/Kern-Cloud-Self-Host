@@ -595,7 +595,8 @@ print()
       [ "${1:-}" = "--with-workspaces" ] && extra="?withWorkspaces=true"
       id="$(user_id_for "$who")"
       confirm "This deletes $who, their personal space and every workspace they own. It cannot be undone."
-      BODY="$(api DELETE "/users/$id$extra" "{\"confirm\":$(json_quote "$who")}")"
+      sep="&"; [ -z "$extra" ] && sep="?"
+      BODY="$(api DELETE "/users/$id$extra${sep}confirm=$(urlencode "$who")")"
       [ "$JSON" = 1 ] && { printf '%s\n' "$BODY"; return 0; }
       say "${C_OK}Deleted $who${C_OFF} and $(json_num "$BODY" spacesRemoved) space(s)."
       ;;
@@ -718,7 +719,8 @@ print()
       else
         confirm "This marks \"$name\" deleted for everyone in it."
       fi
-      BODY="$(api DELETE "/spaces/$id$purge" "{\"confirm\":$(json_quote "$name")}")"
+      sep="&"; [ -z "$purge" ] && sep="?"
+      BODY="$(api DELETE "/spaces/$id$purge${sep}confirm=$(urlencode "$name")")"
       [ "$JSON" = 1 ] && { printf '%s\n' "$BODY"; return 0; }
       if [ -n "$purge" ]; then
         say "${C_OK}\"$name\" is gone.${C_OFF}"

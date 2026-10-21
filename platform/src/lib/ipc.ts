@@ -83,8 +83,7 @@ export const api = {
     deleteUser: (id: string, confirm: string, withWorkspaces = false) =>
       call<{ deleted: boolean; email: string; spacesRemoved: number }>("admin_send", {
         method: "DELETE",
-        path: withQuery(`/users/${encodeURIComponent(id)}`, { withWorkspaces: withWorkspaces || undefined }),
-        body: { confirm },
+        path: withQuery(`/users/${encodeURIComponent(id)}`, { confirm, withWorkspaces: withWorkspaces || undefined }),
       }),
 
     allow: () => call<{ registration: T.Registration; allowed: T.AllowEntry[] }>("admin_get", { path: "/allow" }),
@@ -101,8 +100,7 @@ export const api = {
     deleteSpace: (id: string, confirm: string, purge = false) =>
       call<{ id: string; name: string; purged: boolean }>("admin_send", {
         method: "DELETE",
-        path: withQuery(`/spaces/${encodeURIComponent(id)}`, { purge: purge || undefined }),
-        body: { confirm },
+        path: withQuery(`/spaces/${encodeURIComponent(id)}`, { confirm, purge: purge || undefined }),
       }),
 
     invites: () => call<{ invites: T.Invite[] }>("admin_get", { path: "/invites?limit=200" }),
