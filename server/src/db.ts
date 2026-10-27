@@ -7,6 +7,21 @@ import { config } from "./config.js";
 // BIGINT (sequence numbers) as JS numbers: they stay far below 2^53.
 pg.types.setTypeParser(20, (v) => Number.parseInt(v, 10));
 
+// pg parses a connection string lazily, when it first opens a client, and the
+// error it throws for a bad one withholds the string (ERR_INVALID_URL, input
+// redacted). A malformed DATABASE_URL therefore arrives as a failure on every
+// query with nothing in the log to act on. Parsing it here, through pg's own
+// parser, turns that into one refusal at startup that names the cause.
+if ("connectionString" in config.database) {
+  try {
+    new pg.Client(config.database);
+  } catch {
+    throw new Error(
+      'DATABASE_URL is set, and PostgreSQL cannot parse it as a connection URL. A "/", "?" or "#" in the password ends the URL\'s authority early and has to be percent-encoded ("/" as %2F). Under docker compose the other fix is to remove the DATABASE_URL line from .env: PGHOST and PGPASSWORD then carry the same details, and a password passed that way needs no escaping (see .env.example).',
+    );
+  }
+}
+
 export const pool = new pg.Pool({
   ...config.database,
   max: 20,
